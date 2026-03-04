@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="MailDirectoryEngine.csproj" />
+  <Project Path="MailDirectoryEngine.Tests/MailDirectoryEngine.Tests.csproj" />
 </Solution>
