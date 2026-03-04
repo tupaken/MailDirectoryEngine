@@ -88,3 +88,6 @@ artifacts/
 coverage/
 *.coverage
 *.coveragexml
+
+
+Imap_config.json
