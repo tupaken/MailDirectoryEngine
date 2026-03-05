@@ -4,12 +4,18 @@ using MailKit;
 
 namespace MailDirectoryEngine.src.Imap
 {
+    /// <summary>
+    /// High-level IMAP operations used by the application.
+    /// </summary>
     class ImapEngine
     {
         private readonly IImapClientFactory _clientFactory;
         private readonly IImapConfigProvider _configProvider;
         private readonly string _accountKey;
 
+        /// <summary>
+        /// Initializes the engine with production defaults.
+        /// </summary>
         public ImapEngine()
             : this(
                 new ImapService(),
@@ -18,6 +24,12 @@ namespace MailDirectoryEngine.src.Imap
         {
         }
 
+        /// <summary>
+        /// Initializes the engine with custom collaborators and account key.
+        /// </summary>
+        /// <param name="clientFactory">Factory used to create IMAP clients.</param>
+        /// <param name="configProvider">Provider used to resolve account configuration.</param>
+        /// <param name="accountKey">Account key resolved from configuration.</param>
         internal ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey)
         {
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
@@ -28,6 +40,13 @@ namespace MailDirectoryEngine.src.Imap
             _accountKey = accountKey;
         }
 
+        /// <summary>
+        /// Gets the message count from the sent items folder.
+        /// </summary>
+        /// <returns>Number of messages in sent items.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no sent items folder can be found.
+        /// </exception>
         public int GetSendCount()
         {
             var client = this.CreateClient();
@@ -56,6 +75,10 @@ namespace MailDirectoryEngine.src.Imap
             }
         }
 
+        /// <summary>
+        /// Gets the message count from the inbox folder.
+        /// </summary>
+        /// <returns>Number of messages in inbox.</returns>
         public int GetInboxCount()
         {
             var client = this.CreateClient();
@@ -73,6 +96,10 @@ namespace MailDirectoryEngine.src.Imap
             }
         }
 
+        /// <summary>
+        /// Creates an IMAP client for the configured account key.
+        /// </summary>
+        /// <returns>A connected and authenticated IMAP client.</returns>
         private IImapClient CreateClient()
         {
             var config = _configProvider.GetConfig(_accountKey);
@@ -81,6 +108,10 @@ namespace MailDirectoryEngine.src.Imap
             return client;
         }
 
+        /// <summary>
+        /// Gracefully disconnects and disposes the IMAP client.
+        /// </summary>
+        /// <param name="client">Client to disconnect and dispose.</param>
         private static void ClientDisconnect(IImapClient client)
         {
             client.Disconnect(true);
