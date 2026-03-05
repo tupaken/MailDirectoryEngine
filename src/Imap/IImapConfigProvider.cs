@@ -11,5 +11,7 @@ namespace MailDirectoryEngine.src.Imap
         /// <param name="key">Account key in the settings file.</param>
         /// <returns>Configuration for the requested account.</returns>
         ImapConfig GetConfig(string key);
+        
+        string GetSavePath();
     }
 }

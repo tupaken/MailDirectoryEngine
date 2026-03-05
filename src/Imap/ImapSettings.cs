@@ -13,5 +13,7 @@ namespace MailDirectoryEngine.src.Imap
         /// Gets or sets named IMAP accounts.
         /// </summary>
         public Dictionary<string, ImapConfig> Accounts { get; set; } = new();
+    
+        public string SavePath { get; set; } = "";
     }
 }

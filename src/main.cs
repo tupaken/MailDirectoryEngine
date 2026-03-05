@@ -13,6 +13,10 @@ namespace MailDirectoryEngine.src
             var engine = new Imap.ImapEngine();
             Console.WriteLine("Gesendet: " + engine.GetSendCount());
             Console.WriteLine("Postengang: " + engine.GetInboxCount());
+            Console.WriteLine("UID " + engine.GetLastInboxMessage().Uid);
+            Console.WriteLine("Context " + engine.GetLastInboxMessage().Context);
+            Console.WriteLine("Titel " + engine.GetLastInboxMessage().Titel);
+            engine.SaveInboxMail(engine.GetLastInboxMessage().Uid);
 
         }
     }

@@ -40,5 +40,20 @@ namespace MailDirectoryEngine.src.Imap
 
             return config;
         }
+
+        public string GetSavePath()
+        {
+            var settings = ConfigLoader.Load(_path);
+
+            var rawPath = string.IsNullOrWhiteSpace(settings.SavePath)
+                ? Environment.GetEnvironmentVariable("MAIL_SAVE_DIR")
+                : settings.SavePath;
+
+            if (string.IsNullOrWhiteSpace(rawPath))
+                throw new InvalidOperationException("SavePath fehlt (JSON oder ENV MAIL_SAVE_DIR).");
+
+            var expanded = Environment.ExpandEnvironmentVariables(rawPath);
+            return Path.GetFullPath(expanded);
+        }
     }
 }

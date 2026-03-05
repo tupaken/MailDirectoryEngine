@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using MailKit;
+using MailKit.Search;
+using Org.BouncyCastle.Security;
 
 namespace MailDirectoryEngine.src.Imap
 {
@@ -84,9 +86,7 @@ namespace MailDirectoryEngine.src.Imap
             var client = this.CreateClient();
             try
             {
-                var inbox = client.Inbox;
-
-                inbox.Open(FolderAccess.ReadOnly);
+                var inbox = GetInbox(client);
                 int count = inbox.Count;
                 return count;
             }
@@ -116,6 +116,103 @@ namespace MailDirectoryEngine.src.Imap
         {
             client.Disconnect(true);
             client.Dispose();
+        }
+
+
+        /// <summary>
+        /// Get last Message in Inbox  
+        /// </summary>
+        /// <returns> UID, Titel, Context </returns>
+        public MessageDto? GetLastInboxMessage(){
+            
+            var client = this.CreateClient();
+            UniqueId? lastUid = null;
+            MimeKit.MimeMessage? message = null;
+            try
+            {
+                var inbox = GetInbox(client);
+                
+                lastUid = this.GetLastUID(inbox);
+
+                if (lastUid is null)
+                {
+                    return new MessageDto(UniqueId.Invalid,"","");
+                }
+                message = inbox.GetMessage(lastUid.Value);
+
+            }
+            finally
+            {
+                ClientDisconnect(client);
+            }
+            
+            return new MessageDto(lastUid.Value,
+            message.Subject ?? "",message.HtmlBody ?? message.TextBody ?? "");
+        }
+
+        /// <summary>
+        /// Get all Uids
+        /// </summary>
+        /// <param name="inbox"></param>
+        /// <returns></returns>
+        private IList<UniqueId> GetAllUIDS(IImapFolder folder)
+        {   
+            return folder.Search(SearchQuery.All);
+        }
+
+
+        /// <summary>
+        /// Get last UID in folder
+        /// </summary>
+        /// <param name="inbox"></param>
+        /// <returns></returns>
+        private UniqueId? GetLastUID(IImapFolder fold)
+        {
+            var uids = GetAllUIDS(fold);
+            if (uids.Count == 0)
+            {
+                return null;
+            }
+            var lastUid=uids[^1];
+            return lastUid;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="uid"></param>
+        /// <exception cref="InvalidOperationException"></exception>
+        public void SaveInboxMail(UniqueId uid)
+        {
+            var client = this.CreateClient();
+            try{
+                var inbox = this.GetInbox(client);
+                var msg = inbox.GetMessage(uid);
+                var dir = _configProvider.GetSavePath();
+                if (string.IsNullOrWhiteSpace(dir))
+                    throw new InvalidOperationException("SavePath is not specified");
+                dir = Path.GetFullPath(Environment.ExpandEnvironmentVariables(dir));
+                Directory.CreateDirectory(dir);
+
+                var filePath = Path.Combine(dir, $"{uid.Id}.eml");
+                using var fs = File.Create(filePath);
+                msg.WriteTo(fs);
+            }
+            finally{
+                ClientDisconnect(client);
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="client"></param>
+        /// <returns></returns>
+        private IImapFolder GetInbox(IImapClient client)
+        {
+            var inbox=client.Inbox;
+            inbox.Open(FolderAccess.ReadOnly);
+            return inbox;
         }
     }
 }

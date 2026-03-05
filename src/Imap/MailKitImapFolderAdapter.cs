@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using MailKit;
+using MailKit.Search;
+using MimeKit;
 
 namespace MailDirectoryEngine.src.Imap
 {
@@ -55,6 +57,16 @@ namespace MailDirectoryEngine.src.Imap
         public IEnumerable<IImapFolder> GetSubfolders(bool recursive)
         {
             return _folder.GetSubfolders(recursive).Select(f => new MailKitImapFolderAdapter(f));
+        }
+
+        public IList<UniqueId> Search(SearchQuery query)
+        {
+            return _folder.Search(query);
+        }
+
+        public MimeMessage GetMessage(UniqueId uid)
+        {
+            return _folder.GetMessage(uid);
         }
     }
 }
