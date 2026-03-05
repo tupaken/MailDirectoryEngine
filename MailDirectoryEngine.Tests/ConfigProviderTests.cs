@@ -7,6 +7,8 @@ namespace MailDirectoryEngine.Tests;
 
 public class ConfigProviderTests
 {
+    private static readonly object EnvLock = new();
+
     [Fact]
     public void JsonImapConfigProvider_ThrowsForUnknownKey()
     {
@@ -68,6 +70,120 @@ public class ConfigProviderTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void JsonImapConfigProvider_GetSavePath_ReturnsConfiguredPath()
+    {
+        var configuredPath = Path.Combine(Path.GetTempPath(), "mail-export");
+        var escapedPath = configuredPath.Replace("\\", "\\\\");
+        var json = $$"""
+        {
+          "accounts": {
+            "test": {
+              "host": "imap.example.test",
+              "port": 993,
+              "user": "user",
+              "password": "pass"
+            }
+          },
+          "savePath": "{{escapedPath}}"
+        }
+        """;
+
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(path, json);
+            var provider = new JsonImapConfigProvider(path);
+
+            var resolved = provider.GetSavePath();
+
+            Assert.Equal(Path.GetFullPath(configuredPath), resolved);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void JsonImapConfigProvider_GetSavePath_FallsBackToEnvironmentVariable()
+    {
+        var json = """
+        {
+          "accounts": {
+            "test": {
+              "host": "imap.example.test",
+              "port": 993,
+              "user": "user",
+              "password": "pass"
+            }
+          }
+        }
+        """;
+
+        lock (EnvLock)
+        {
+            var original = Environment.GetEnvironmentVariable("MAIL_SAVE_DIR");
+            var envPath = Path.Combine(Path.GetTempPath(), "mail-export-from-env");
+            var path = Path.GetTempFileName();
+
+            try
+            {
+                Environment.SetEnvironmentVariable("MAIL_SAVE_DIR", envPath);
+                File.WriteAllText(path, json);
+                var provider = new JsonImapConfigProvider(path);
+
+                var resolved = provider.GetSavePath();
+
+                Assert.Equal(Path.GetFullPath(envPath), resolved);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MAIL_SAVE_DIR", original);
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Fact]
+    public void JsonImapConfigProvider_GetSavePath_ThrowsWhenMissingInJsonAndEnv()
+    {
+        var json = """
+        {
+          "accounts": {
+            "test": {
+              "host": "imap.example.test",
+              "port": 993,
+              "user": "user",
+              "password": "pass"
+            }
+          },
+          "savePath": ""
+        }
+        """;
+
+        lock (EnvLock)
+        {
+            var original = Environment.GetEnvironmentVariable("MAIL_SAVE_DIR");
+            var path = Path.GetTempFileName();
+
+            try
+            {
+                Environment.SetEnvironmentVariable("MAIL_SAVE_DIR", null);
+                File.WriteAllText(path, json);
+                var provider = new JsonImapConfigProvider(path);
+
+                var ex = Assert.Throws<InvalidOperationException>(() => provider.GetSavePath());
+                Assert.Contains("SavePath", ex.Message);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MAIL_SAVE_DIR", original);
+                File.Delete(path);
+            }
         }
     }
 }
