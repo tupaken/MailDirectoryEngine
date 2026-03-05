@@ -13,7 +13,10 @@ namespace MailDirectoryEngine.src.Imap
         /// Gets or sets named IMAP accounts.
         /// </summary>
         public Dictionary<string, ImapConfig> Accounts { get; set; } = new();
-    
+
+        /// <summary>
+        /// Gets or sets the default directory path used to persist exported emails.
+        /// </summary>
         public string SavePath { get; set; } = "";
     }
 }

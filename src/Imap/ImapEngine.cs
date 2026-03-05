@@ -120,9 +120,12 @@ namespace MailDirectoryEngine.src.Imap
 
 
         /// <summary>
-        /// Get last Message in Inbox  
+        /// Retrieves the newest message from the inbox as a lightweight DTO.
         /// </summary>
-        /// <returns> UID, Titel, Context </returns>
+        /// <returns>
+        /// A <see cref="MessageDto"/> containing UID, subject and message body.
+        /// Returns an empty DTO with <see cref="UniqueId.Invalid"/> when inbox is empty.
+        /// </returns>
         public MessageDto? GetLastInboxMessage(){
             
             var client = this.CreateClient();
@@ -151,10 +154,10 @@ namespace MailDirectoryEngine.src.Imap
         }
 
         /// <summary>
-        /// Get all Uids
+        /// Reads all message UIDs from the provided folder.
         /// </summary>
-        /// <param name="inbox"></param>
-        /// <returns></returns>
+        /// <param name="folder">Opened IMAP folder.</param>
+        /// <returns>List of UIDs in server order.</returns>
         private IList<UniqueId> GetAllUIDS(IImapFolder folder)
         {   
             return folder.Search(SearchQuery.All);
@@ -162,10 +165,10 @@ namespace MailDirectoryEngine.src.Imap
 
 
         /// <summary>
-        /// Get last UID in folder
+        /// Resolves the newest UID from a folder.
         /// </summary>
-        /// <param name="inbox"></param>
-        /// <returns></returns>
+        /// <param name="fold">Opened IMAP folder.</param>
+        /// <returns>Last UID, or null if folder is empty.</returns>
         private UniqueId? GetLastUID(IImapFolder fold)
         {
             var uids = GetAllUIDS(fold);
@@ -178,10 +181,12 @@ namespace MailDirectoryEngine.src.Imap
         }
 
         /// <summary>
-        /// 
+        /// Exports the specified inbox message as an <c>.eml</c> file.
         /// </summary>
-        /// <param name="uid"></param>
-        /// <exception cref="InvalidOperationException"></exception>
+        /// <param name="uid">UID of the message to export.</param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no save path is configured.
+        /// </exception>
         public void SaveInboxMail(UniqueId uid)
         {
             var client = this.CreateClient();
@@ -204,10 +209,10 @@ namespace MailDirectoryEngine.src.Imap
         }
 
         /// <summary>
-        /// 
+        /// Opens and returns the inbox folder in read-only mode.
         /// </summary>
-        /// <param name="client"></param>
-        /// <returns></returns>
+        /// <param name="client">Connected IMAP client.</param>
+        /// <returns>Opened inbox folder abstraction.</returns>
         private IImapFolder GetInbox(IImapClient client)
         {
             var inbox=client.Inbox;
