@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using MailKit;
+using MailKit.Search;
+using MimeKit;
 
 namespace MailDirectoryEngine.src.Imap
 {
@@ -37,5 +39,19 @@ namespace MailDirectoryEngine.src.Imap
         /// </param>
         /// <returns>Sequence of subfolders.</returns>
         IEnumerable<IImapFolder> GetSubfolders(bool recursive);
+
+        /// <summary>
+        /// Searches the folder for messages matching the provided query.
+        /// </summary>
+        /// <param name="query">MailKit search query.</param>
+        /// <returns>Matching message UIDs in server order.</returns>
+        IList<UniqueId> Search(SearchQuery query);
+
+        /// <summary>
+        /// Loads a single message by UID from the opened folder.
+        /// </summary>
+        /// <param name="uid">Unique message identifier.</param>
+        /// <returns>The fully parsed MIME message.</returns>
+        MimeMessage GetMessage(UniqueId uid);
     }
 }

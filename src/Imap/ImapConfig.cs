@@ -28,5 +28,10 @@ namespace MailDirectoryEngine.src.Imap
         /// Gets or sets the account password.
         /// </summary>
         public string Password { get; set; } = "";
+        
+        /// <summary>
+        /// Gets or sets the path for save e-mails 
+        /// </summary>
+        public string SavePath { get; set; } = "";
     }
 }

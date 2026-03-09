@@ -1,8 +1,11 @@
-using System.Collections.Generic;
-using System.Linq;
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using MailDirectoryEngine.src.Imap;
 using MailKit;
+using MailKit.Search;
+using MimeKit;
 using Xunit;
 
 namespace MailDirectoryEngine.Tests;
@@ -102,6 +105,182 @@ public class ImapEngineTests
         Assert.Contains("Gesendete Elemente", ex.Message);
         Assert.True(client.DisconnectCalled);
     }
+
+    [Fact]
+    public void GetLastInboxMessage_ReturnsNewestMessage()
+    {
+        var olderUid = new UniqueId(1);
+        var newerUid = new UniqueId(2);
+
+        var olderMessage = CreateMessage("old subject", "old text", "<p>old html</p>");
+        var newerMessage = CreateMessage("new subject", "new text", "<p>new html</p>");
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 2,
+            searchResults: new[] { olderUid, newerUid },
+            messages: new Dictionary<UniqueId, MimeMessage>
+            {
+                [olderUid] = olderMessage,
+                [newerUid] = newerMessage
+            });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastInboxMessage();
+
+        Assert.NotNull(result);
+        Assert.Equal(newerUid, result!.Uid);
+        Assert.Equal("new subject", result.Titel);
+        Assert.Equal("<p>new html</p>", result.Context);
+        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    [Fact]
+    public void GetLastInboxMessage_ReturnsInvalid_WhenInboxEmpty()
+    {
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 0,
+            searchResults: Array.Empty<UniqueId>());
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastInboxMessage();
+
+        Assert.NotNull(result);
+        Assert.Equal(UniqueId.Invalid, result!.Uid);
+        Assert.Equal(string.Empty, result.Titel);
+        Assert.Equal(string.Empty, result.Context);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    [Fact]
+    public void SaveInboxMail_WritesEmlFileToConfiguredPath()
+    {
+        var uid = new UniqueId(777);
+        var message = CreateMessage("Saved Subject", "Saved text", "<p>Saved html</p>");
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+
+        var savePath = Path.Combine(Path.GetTempPath(), "MailDirectoryEngineTests", Guid.NewGuid().ToString("N"));
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(savePath),
+            "bewerbung");
+
+        try
+        {
+            engine.SaveInboxMail(uid);
+
+            var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
+            Assert.True(File.Exists(expectedFile));
+            Assert.Contains("Saved Subject", File.ReadAllText(expectedFile));
+            Assert.True(client.DisconnectCalled);
+        }
+        finally
+        {
+            if (Directory.Exists(savePath))
+                Directory.Delete(savePath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SaveInboxMail_ThrowsWhenSavePathMissing_AndDisconnects()
+    {
+        var uid = new UniqueId(10);
+        var message = CreateMessage("subject", "text", "<p>html</p>");
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(savePath: ""),
+            "bewerbung");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => engine.SaveInboxMail(uid));
+
+        Assert.Contains("SavePath", ex.Message);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    [Fact]
+    public void SaveInboxMail_ThrowsWhenUidNotFound_AndDisconnects()
+    {
+        var existingUid = new UniqueId(22);
+        var requestedUid = new UniqueId(99);
+        var message = CreateMessage("subject", "text", "<p>html</p>");
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [existingUid] = message });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var savePath = Path.Combine(Path.GetTempPath(), "MailDirectoryEngineTests", Guid.NewGuid().ToString("N"));
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(savePath),
+            "bewerbung");
+
+        try
+        {
+            var ex = Assert.Throws<KeyNotFoundException>(() => engine.SaveInboxMail(requestedUid));
+
+            Assert.Contains("UID", ex.Message);
+            Assert.True(client.DisconnectCalled);
+        }
+        finally
+        {
+            if (Directory.Exists(savePath))
+                Directory.Delete(savePath, recursive: true);
+        }
+    }
+
+    private static MimeMessage CreateMessage(string subject, string textBody, string htmlBody)
+    {
+        var message = new MimeMessage();
+        message.From.Add(MailboxAddress.Parse("sender@example.test"));
+        message.To.Add(MailboxAddress.Parse("receiver@example.test"));
+        message.Subject = subject;
+
+        var bodyBuilder = new BodyBuilder
+        {
+            TextBody = textBody,
+            HtmlBody = htmlBody
+        };
+
+        message.Body = bodyBuilder.ToMessageBody();
+        return message;
+    }
 }
 
 internal sealed class FakeImapClientFactory : IImapClientFactory
@@ -121,6 +300,13 @@ internal sealed class FakeImapClientFactory : IImapClientFactory
 
 internal sealed class FakeConfigProvider : IImapConfigProvider
 {
+    private readonly string _savePath;
+
+    public FakeConfigProvider(string savePath = @"C:\Temp\mail-export")
+    {
+        _savePath = savePath;
+    }
+
     public ImapConfig GetConfig(string key)
     {
         return new ImapConfig
@@ -130,6 +316,11 @@ internal sealed class FakeConfigProvider : IImapConfigProvider
             User = "user",
             Password = "pass"
         };
+    }
+
+    public string GetSavePath()
+    {
+        return _savePath;
     }
 }
 
@@ -166,13 +357,25 @@ internal sealed class FakeImapClient : IImapClient
 internal sealed class FakeImapFolder : IImapFolder
 {
     private readonly List<IImapFolder> _subfolders;
+    private readonly List<UniqueId> _searchResults;
+    private readonly Dictionary<UniqueId, MimeMessage> _messages;
 
-    public FakeImapFolder(string name, string fullName, int count, IEnumerable<IImapFolder>? subfolders = null)
+    public FakeImapFolder(
+        string name,
+        string fullName,
+        int count,
+        IEnumerable<IImapFolder>? subfolders = null,
+        IEnumerable<UniqueId>? searchResults = null,
+        IDictionary<UniqueId, MimeMessage>? messages = null)
     {
         Name = name;
         FullName = fullName;
         Count = count;
         _subfolders = subfolders?.ToList() ?? new List<IImapFolder>();
+        _searchResults = searchResults?.ToList() ?? new List<UniqueId>();
+        _messages = messages != null
+            ? new Dictionary<UniqueId, MimeMessage>(messages)
+            : new Dictionary<UniqueId, MimeMessage>();
     }
 
     public string Name { get; }
@@ -206,5 +409,18 @@ internal sealed class FakeImapFolder : IImapFolder
         }
 
         return all;
+    }
+
+    public IList<UniqueId> Search(SearchQuery query)
+    {
+        return _searchResults.ToList();
+    }
+
+    public MimeMessage GetMessage(UniqueId uid)
+    {
+        if (_messages.TryGetValue(uid, out var message))
+            return message;
+
+        throw new KeyNotFoundException($"No message configured for UID {uid}.");
     }
 }

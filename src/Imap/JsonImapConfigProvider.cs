@@ -40,5 +40,27 @@ namespace MailDirectoryEngine.src.Imap
 
             return config;
         }
+
+        /// <summary>
+        /// Resolves the email export directory from JSON settings or MAIL_SAVE_DIR environment variable.
+        /// </summary>
+        /// <returns>Normalized full path to the export directory.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when neither JSON SavePath nor MAIL_SAVE_DIR is set.
+        /// </exception>
+        public string GetSavePath()
+        {
+            var settings = ConfigLoader.Load(_path);
+
+            var rawPath = string.IsNullOrWhiteSpace(settings.SavePath)
+                ? Environment.GetEnvironmentVariable("MAIL_SAVE_DIR")
+                : settings.SavePath;
+
+            if (string.IsNullOrWhiteSpace(rawPath))
+                throw new InvalidOperationException("SavePath fehlt (JSON oder ENV MAIL_SAVE_DIR).");
+
+            var expanded = Environment.ExpandEnvironmentVariables(rawPath);
+            return Path.GetFullPath(expanded);
+        }
     }
 }
