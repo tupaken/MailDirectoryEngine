@@ -23,4 +23,12 @@ services:
       -password=${POSTGRES_PASSWORD}
       migrate
     volumes:
-    - ./migrations:/flyway/sql
+    - ./DB/migrations:/flyway/sql
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
