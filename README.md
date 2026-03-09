@@ -2,6 +2,10 @@
 
 A quick command reference for build, run, and tests.
 
+## Documentation
+
+- API reference (English): `docs/API.md`
+
 ## Prerequisites
 
 - .NET SDK 10 installed (`net10.0`)

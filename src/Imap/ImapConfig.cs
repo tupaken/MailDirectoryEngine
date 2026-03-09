@@ -30,7 +30,7 @@ namespace MailDirectoryEngine.src.Imap
         public string Password { get; set; } = "";
         
         /// <summary>
-        /// Gets or sets the path for save e-mails 
+        /// Gets or sets the directory path used to persist exported e-mails.
         /// </summary>
         public string SavePath { get; set; } = "";
     }

@@ -57,7 +57,7 @@ namespace MailDirectoryEngine.src.Imap
                 : settings.SavePath;
 
             if (string.IsNullOrWhiteSpace(rawPath))
-                throw new InvalidOperationException("SavePath fehlt (JSON oder ENV MAIL_SAVE_DIR).");
+                throw new InvalidOperationException("SavePath is missing (JSON or ENV MAIL_SAVE_DIR).");
 
             var expanded = Environment.ExpandEnvironmentVariables(rawPath);
             return Path.GetFullPath(expanded);

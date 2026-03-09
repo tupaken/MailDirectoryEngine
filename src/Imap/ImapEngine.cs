@@ -112,33 +112,40 @@ namespace MailDirectoryEngine.src.Imap
         /// A <see cref="MessageDto"/> containing UID, subject and message body.
         /// Returns an empty DTO with <see cref="UniqueId.Invalid"/> when inbox is empty.
         /// </returns>
-        public MessageDto? GetLastInboxMessage(){
-            
+        public MessageDto? GetLastInboxMessage()
+        {
             var client = this.CreateClient();
             UniqueId? lastUid = null;
             MimeKit.MimeMessage? message = null;
             try
             {
                 var inbox = GetInbox(client);
-                
+
                 lastUid = this.GetLastUID(inbox);
 
                 if (lastUid is null)
                 {
-                    return new MessageDto(UniqueId.Invalid,"","");
+                    return new MessageDto(UniqueId.Invalid, "", "");
                 }
                 message = inbox.GetMessage(lastUid.Value);
-
             }
             finally
             {
                 ClientDisconnect(client);
             }
-            
+
             return new MessageDto(lastUid.Value,
-            message.Subject ?? "",message.HtmlBody ?? message.TextBody ?? "");
+                message.Subject ?? "",
+                message.HtmlBody ?? message.TextBody ?? "");
         }
 
+        /// <summary>
+        /// Retrieves the newest message from the sent folder as a lightweight DTO.
+        /// </summary>
+        /// <returns>
+        /// A <see cref="MessageDto"/> containing UID, subject and message body.
+        /// Returns an empty DTO with <see cref="UniqueId.Invalid"/> when the sent folder is empty.
+        /// </returns>
         public MessageDto? GetLastSentMail()
         {
             var client = CreateClient();
@@ -147,19 +154,22 @@ namespace MailDirectoryEngine.src.Imap
             try
             {
                 var box = GetSent(client);
-                lastUid=GetLastUID(box);
-                 if (lastUid is null)
+                lastUid = GetLastUID(box);
+                if (lastUid is null)
                 {
-                    return new MessageDto(UniqueId.Invalid,"","");
+                    return new MessageDto(UniqueId.Invalid, "", "");
                 }
                 message = box.GetMessage(lastUid.Value);
-
             }
-            finally{ClientDisconnect(client);};
+            finally
+            {
+                ClientDisconnect(client);
+            }
 
             return new MessageDto(lastUid.Value,
-                message.Subject ?? "",message.HtmlBody ?? message.TextBody ?? "");
-        } 
+                message.Subject ?? "",
+                message.HtmlBody ?? message.TextBody ?? "");
+        }
 
         /// <summary>
         /// Reads all message UIDs from the provided folder.
@@ -167,7 +177,7 @@ namespace MailDirectoryEngine.src.Imap
         /// <param name="folder">Opened IMAP folder.</param>
         /// <returns>List of UIDs in server order.</returns>
         public IList<UniqueId> GetAllUIDS(IImapFolder folder)
-        {   
+        {
             return folder.Search(SearchQuery.All);
         }
 
@@ -184,7 +194,7 @@ namespace MailDirectoryEngine.src.Imap
             {
                 return null;
             }
-            var lastUid=uids[^1];
+            var lastUid = uids[^1];
             return lastUid;
         }
 
@@ -198,7 +208,8 @@ namespace MailDirectoryEngine.src.Imap
         public void SaveInboxMail(UniqueId uid)
         {
             var client = CreateClient();
-            try{
+            try
+            {
                 var inbox = GetInbox(client);
                 var msg = inbox.GetMessage(uid);
                 var dir = _configProvider.GetSavePath();
@@ -211,7 +222,8 @@ namespace MailDirectoryEngine.src.Imap
                 using var fs = File.Create(filePath);
                 msg.WriteTo(fs);
             }
-            finally{
+            finally
+            {
                 ClientDisconnect(client);
             }
         }
@@ -223,16 +235,16 @@ namespace MailDirectoryEngine.src.Imap
         /// <returns>Opened inbox folder abstraction.</returns>
         private IImapFolder GetInbox(IImapClient client)
         {
-            var inbox=client.Inbox;
+            var inbox = client.Inbox;
             inbox.Open(FolderAccess.ReadOnly);
             return inbox;
         }
 
         /// <summary>
-        /// 
+        /// Locates and opens the sent folder in read-only mode.
         /// </summary>
-        /// <param name="client"></param>
-        /// <returns></returns>
+        /// <param name="client">Connected IMAP client.</param>
+        /// <returns>Opened sent folder abstraction.</returns>
         /// <exception cref="InvalidOperationException"></exception>
         private IImapFolder GetSent(IImapClient client)
         {
@@ -240,20 +252,28 @@ namespace MailDirectoryEngine.src.Imap
             var separator = client.DirectorySeparator;
             var folders = root.GetSubfolders(true).ToList();
             var sent = folders.FirstOrDefault(f =>
-            string.Equals(f.Name, "Gesendete Elemente", StringComparison.Ordinal) ||
-            string.Equals(f.FullName, "Gesendete Elemente", StringComparison.Ordinal) ||
-            f.FullName.EndsWith($"{separator}Gesendete Elemente", StringComparison.Ordinal) ||
-            f.FullName.EndsWith($".Gesendete Elemente", StringComparison.Ordinal));
+                string.Equals(f.Name, "Gesendete Elemente", StringComparison.Ordinal) ||
+                string.Equals(f.FullName, "Gesendete Elemente", StringComparison.Ordinal) ||
+                f.FullName.EndsWith($"{separator}Gesendete Elemente", StringComparison.Ordinal) ||
+                f.FullName.EndsWith($".Gesendete Elemente", StringComparison.Ordinal));
             if (sent == null)
-                throw new InvalidOperationException("Der Ordner 'Gesendete Elemente' wurde nicht gefunden.");
+                throw new InvalidOperationException("Sent folder 'Gesendete Elemente' was not found.");
             sent.Open(FolderAccess.ReadOnly);
             return sent;
         }
 
+        /// <summary>
+        /// Exports the specified sent message as an <c>.eml</c> file.
+        /// </summary>
+        /// <param name="uid">UID of the sent message to export.</param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no save path is configured.
+        /// </exception>
         public void SaveSentMail(UniqueId uid)
         {
             var client = CreateClient();
-            try{
+            try
+            {
                 var box = GetSent(client);
                 var msg = box.GetMessage(uid);
                 var dir = _configProvider.GetSavePath();
@@ -266,9 +286,10 @@ namespace MailDirectoryEngine.src.Imap
                 using var fs = File.Create(filePath);
                 msg.WriteTo(fs);
             }
-            finally{
+            finally
+            {
                 ClientDisconnect(client);
             }
-        } 
+        }
     }
 }

@@ -50,7 +50,7 @@ namespace MailDirectoryEngine.src.Imap
             {
                 client.Dispose();
                 throw new InvalidOperationException(
-                    $"IMAP Connect/Auth fehlgeschlagen fuer '{config.User}'.",
+                    $"IMAP connect/auth failed for '{config.User}'.",
                     ex);
             }
 
