@@ -17,6 +17,7 @@ namespace MailDirectoryEngine.src
             Console.WriteLine("Context " + engine.GetLastInboxMessage().Context);
             Console.WriteLine("Titel " + engine.GetLastInboxMessage().Titel);
             engine.SaveInboxMail(engine.GetLastInboxMessage().Uid);
+            engine.SaveSentMail(engine.GetLastSentMail().Uid);
 
         }
     }

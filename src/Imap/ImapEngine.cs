@@ -54,21 +54,7 @@ namespace MailDirectoryEngine.src.Imap
             var client = this.CreateClient();
             try
             {
-                var root = client.GetPersonalRoot();
-                var separator = client.DirectorySeparator;
-
-                var folders = root.GetSubfolders(true).ToList();
-
-                var sent = folders.FirstOrDefault(f =>
-                                string.Equals(f.Name, "Gesendete Elemente", StringComparison.Ordinal) ||
-                                string.Equals(f.FullName, "Gesendete Elemente", StringComparison.Ordinal) ||
-                                f.FullName.EndsWith($"{separator}Gesendete Elemente", StringComparison.Ordinal) ||
-                                f.FullName.EndsWith($".Gesendete Elemente", StringComparison.Ordinal));
-
-                if (sent == null)
-                    throw new InvalidOperationException("Der Ordner 'Gesendete Elemente' wurde nicht gefunden.");
-
-                sent.Open(FolderAccess.ReadOnly);
+               var sent = GetSent(client);
                 return sent.Count;
             }
             finally
@@ -153,12 +139,34 @@ namespace MailDirectoryEngine.src.Imap
             message.Subject ?? "",message.HtmlBody ?? message.TextBody ?? "");
         }
 
+        public MessageDto? GetLastSentMail()
+        {
+            var client = CreateClient();
+            UniqueId? lastUid = null;
+            MimeKit.MimeMessage? message = null;
+            try
+            {
+                var box = GetSent(client);
+                lastUid=GetLastUID(box);
+                 if (lastUid is null)
+                {
+                    return new MessageDto(UniqueId.Invalid,"","");
+                }
+                message = box.GetMessage(lastUid.Value);
+
+            }
+            finally{ClientDisconnect(client);};
+
+            return new MessageDto(lastUid.Value,
+                message.Subject ?? "",message.HtmlBody ?? message.TextBody ?? "");
+        } 
+
         /// <summary>
         /// Reads all message UIDs from the provided folder.
         /// </summary>
         /// <param name="folder">Opened IMAP folder.</param>
         /// <returns>List of UIDs in server order.</returns>
-        private IList<UniqueId> GetAllUIDS(IImapFolder folder)
+        public IList<UniqueId> GetAllUIDS(IImapFolder folder)
         {   
             return folder.Search(SearchQuery.All);
         }
@@ -169,7 +177,7 @@ namespace MailDirectoryEngine.src.Imap
         /// </summary>
         /// <param name="fold">Opened IMAP folder.</param>
         /// <returns>Last UID, or null if folder is empty.</returns>
-        private UniqueId? GetLastUID(IImapFolder fold)
+        public UniqueId? GetLastUID(IImapFolder fold)
         {
             var uids = GetAllUIDS(fold);
             if (uids.Count == 0)
@@ -189,9 +197,9 @@ namespace MailDirectoryEngine.src.Imap
         /// </exception>
         public void SaveInboxMail(UniqueId uid)
         {
-            var client = this.CreateClient();
+            var client = CreateClient();
             try{
-                var inbox = this.GetInbox(client);
+                var inbox = GetInbox(client);
                 var msg = inbox.GetMessage(uid);
                 var dir = _configProvider.GetSavePath();
                 if (string.IsNullOrWhiteSpace(dir))
@@ -219,5 +227,48 @@ namespace MailDirectoryEngine.src.Imap
             inbox.Open(FolderAccess.ReadOnly);
             return inbox;
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="client"></param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        private IImapFolder GetSent(IImapClient client)
+        {
+            var root = client.GetPersonalRoot();
+            var separator = client.DirectorySeparator;
+            var folders = root.GetSubfolders(true).ToList();
+            var sent = folders.FirstOrDefault(f =>
+            string.Equals(f.Name, "Gesendete Elemente", StringComparison.Ordinal) ||
+            string.Equals(f.FullName, "Gesendete Elemente", StringComparison.Ordinal) ||
+            f.FullName.EndsWith($"{separator}Gesendete Elemente", StringComparison.Ordinal) ||
+            f.FullName.EndsWith($".Gesendete Elemente", StringComparison.Ordinal));
+            if (sent == null)
+                throw new InvalidOperationException("Der Ordner 'Gesendete Elemente' wurde nicht gefunden.");
+            sent.Open(FolderAccess.ReadOnly);
+            return sent;
+        }
+
+        public void SaveSentMail(UniqueId uid)
+        {
+            var client = CreateClient();
+            try{
+                var box = GetSent(client);
+                var msg = box.GetMessage(uid);
+                var dir = _configProvider.GetSavePath();
+                if (string.IsNullOrWhiteSpace(dir))
+                    throw new InvalidOperationException("SavePath is not specified");
+                dir = Path.GetFullPath(Environment.ExpandEnvironmentVariables(dir));
+                Directory.CreateDirectory(dir);
+
+                var filePath = Path.Combine(dir, $"{uid.Id}.eml");
+                using var fs = File.Create(filePath);
+                msg.WriteTo(fs);
+            }
+            finally{
+                ClientDisconnect(client);
+            }
+        } 
     }
 }
