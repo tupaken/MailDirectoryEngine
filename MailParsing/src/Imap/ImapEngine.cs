@@ -21,7 +21,7 @@ namespace MailDirectoryEngine.src.Imap
         public ImapEngine()
             : this(
                 new ImapService(),
-                new JsonImapConfigProvider("./src/Imap/Imap_config.json"),
+                new JsonImapConfigProvider(Path.Combine(AppContext.BaseDirectory, "src", "Imap", "Imap_config.json")),
                 "bewerbung")
         {
         }
