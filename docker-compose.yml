@@ -4,23 +4,23 @@ services:
 
   postgres:
     image: postgres:16
-    enviromanet:
-    POSTGRES_USER:  ${POSTGRES_USER}
-    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    POSTGRES_DB: ${POSTGRES_DB}
+    environment:
+      POSTGRES_USER:  ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
-      -${POSTGRES_PATH}:/var/lib/postgresql/data
+      - ${POSTGRES_PATH}:/var/lib/postgresql/data
     
-    migrate:
-      image: flyway/flyway
-      depends_on:
-        - postgres
-      command: >
-        -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-        -user=${POSTGRES_USER}
-        -password=${POSTGRES_PASSWORD}
-        migrate
-      volumes:
-      - ./migrations:/flyway/sql
+  migrate:
+    image: flyway/flyway
+    depends_on:
+      - postgres
+    command: >
+      -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      -user=${POSTGRES_USER}
+      -password=${POSTGRES_PASSWORD}
+      migrate
+    volumes:
+    - ./migrations:/flyway/sql
