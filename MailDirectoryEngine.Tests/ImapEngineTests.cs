@@ -13,6 +13,49 @@ namespace MailDirectoryEngine.Tests;
 public class ImapEngineTests
 {
     [Fact]
+    public void DefaultConstructor_CreatesInstance()
+    {
+        var engine = new ImapEngine();
+        Assert.NotNull(engine);
+    }
+
+    [Fact]
+    public void Constructor_Throws_WhenClientFactoryIsNull()
+    {
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            new ImapEngine(
+                clientFactory: null!,
+                configProvider: new FakeConfigProvider(),
+                accountKey: "bewerbung"));
+
+        Assert.Equal("clientFactory", ex.ParamName);
+    }
+
+    [Fact]
+    public void Constructor_Throws_WhenConfigProviderIsNull()
+    {
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            new ImapEngine(
+                clientFactory: new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), new FakeImapFolder("Inbox", "Inbox", 0))),
+                configProvider: null!,
+                accountKey: "bewerbung"));
+
+        Assert.Equal("configProvider", ex.ParamName);
+    }
+
+    [Fact]
+    public void Constructor_Throws_WhenAccountKeyIsBlank()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            new ImapEngine(
+                new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), new FakeImapFolder("Inbox", "Inbox", 0))),
+                new FakeConfigProvider(),
+                " "));
+
+        Assert.Equal("accountKey", ex.ParamName);
+    }
+
+    [Fact]
     public void GetSendCount_UsesSentFolderCount()
     {
         var sentFolder = new FakeImapFolder(
@@ -169,6 +212,144 @@ public class ImapEngineTests
     }
 
     [Fact]
+    public void GetLastSentMail_ReturnsNewestMessage()
+    {
+        var olderUid = new UniqueId(31);
+        var newerUid = new UniqueId(32);
+
+        var olderMessage = CreateMessage("older sent subject", "older sent text", "<p>older sent html</p>");
+        var newerMessage = CreateMessage("newer sent subject", "newer sent text", "<p>newer sent html</p>");
+
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 2,
+            searchResults: new[] { olderUid, newerUid },
+            messages: new Dictionary<UniqueId, MimeMessage>
+            {
+                [olderUid] = olderMessage,
+                [newerUid] = newerMessage
+            });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastSentMail();
+
+        Assert.NotNull(result);
+        Assert.Equal(newerUid, result!.Uid);
+        Assert.Equal("newer sent subject", result.Titel);
+        Assert.Equal("<p>newer sent html</p>", result.Context);
+        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    [Fact]
+    public void GetLastSentMail_ReturnsInvalid_WhenSentFolderEmpty()
+    {
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 0,
+            searchResults: Array.Empty<UniqueId>());
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastSentMail();
+
+        Assert.NotNull(result);
+        Assert.Equal(UniqueId.Invalid, result!.Uid);
+        Assert.Equal(string.Empty, result.Titel);
+        Assert.Equal(string.Empty, result.Context);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    [Fact]
+    public void GetAllUIDS_ReturnsAllUidsFromFolderSearch()
+    {
+        var uid1 = new UniqueId(5);
+        var uid2 = new UniqueId(9);
+
+        var folder = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 2,
+            searchResults: new[] { uid1, uid2 });
+
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), folder)),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetAllUIDS(folder);
+
+        Assert.Equal(new[] { uid1, uid2 }, result);
+    }
+
+    [Fact]
+    public void GetLastUID_ReturnsNull_WhenFolderContainsNoMessages()
+    {
+        var folder = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 0,
+            searchResults: Array.Empty<UniqueId>());
+
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), folder)),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastUID(folder);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void GetLastUID_ReturnsLastUid_WhenFolderContainsMessages()
+    {
+        var uid1 = new UniqueId(12);
+        var uid2 = new UniqueId(13);
+        var uid3 = new UniqueId(14);
+
+        var folder = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 3,
+            searchResults: new[] { uid1, uid2, uid3 });
+
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), folder)),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastUID(folder);
+
+        Assert.Equal(uid3, result);
+    }
+
+    [Fact]
     public void SaveInboxMail_WritesEmlFileToConfiguredPath()
     {
         var uid = new UniqueId(777);
@@ -254,6 +435,121 @@ public class ImapEngineTests
         try
         {
             var ex = Assert.Throws<KeyNotFoundException>(() => engine.SaveInboxMail(requestedUid));
+
+            Assert.Contains("UID", ex.Message);
+            Assert.True(client.DisconnectCalled);
+        }
+        finally
+        {
+            if (Directory.Exists(savePath))
+                Directory.Delete(savePath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SaveSentMail_WritesEmlFileToConfiguredPath()
+    {
+        var uid = new UniqueId(888);
+        var message = CreateMessage("Saved Sent Subject", "Saved sent text", "<p>Saved sent html</p>");
+
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+
+        var savePath = Path.Combine(Path.GetTempPath(), "MailDirectoryEngineTests", Guid.NewGuid().ToString("N"));
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(savePath),
+            "bewerbung");
+
+        try
+        {
+            engine.SaveSentMail(uid);
+
+            var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
+            Assert.True(File.Exists(expectedFile));
+            Assert.Contains("Saved Sent Subject", File.ReadAllText(expectedFile));
+            Assert.True(client.DisconnectCalled);
+        }
+        finally
+        {
+            if (Directory.Exists(savePath))
+                Directory.Delete(savePath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SaveSentMail_ThrowsWhenSavePathMissing_AndDisconnects()
+    {
+        var uid = new UniqueId(45);
+        var message = CreateMessage("subject", "text", "<p>html</p>");
+
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(savePath: ""),
+            "bewerbung");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => engine.SaveSentMail(uid));
+
+        Assert.Contains("SavePath", ex.Message);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    [Fact]
+    public void SaveSentMail_ThrowsWhenUidNotFound_AndDisconnects()
+    {
+        var existingUid = new UniqueId(81);
+        var requestedUid = new UniqueId(82);
+        var message = CreateMessage("subject", "text", "<p>html</p>");
+
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [existingUid] = message });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var savePath = Path.Combine(Path.GetTempPath(), "MailDirectoryEngineTests", Guid.NewGuid().ToString("N"));
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(savePath),
+            "bewerbung");
+
+        try
+        {
+            var ex = Assert.Throws<KeyNotFoundException>(() => engine.SaveSentMail(requestedUid));
 
             Assert.Contains("UID", ex.Message);
             Assert.True(client.DisconnectCalled);
