@@ -1,43 +1,37 @@
 using System;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using MailKit;
 
 namespace MailDirectoryEngine.src
 {
-    internal class main
+    internal class Program
     {
         static void Main(string[] args)
         {
             Console.WriteLine("Main:");
             var engine = new Imap.ImapEngine();
-            var db = new DB.DBClientAdapter();
             var inboxMessage = engine.GetLastInboxMessage();
-            var sentMessage = engine.GetLastSentMail();
 
-            if (inboxMessage is null || inboxMessage.Uid == UniqueId.Invalid)
+            if (inboxMessage.Uid == UniqueId.Invalid)
             {
                 Console.WriteLine("Keine Inbox-Nachricht gefunden.");
                 return;
             }
 
-            Console.WriteLine("Gesendet: " + engine.GetSendCount());
-            Console.WriteLine("Postengang: " + engine.GetInboxCount());
-            Console.WriteLine("UID " + inboxMessage.Uid);
-            Console.WriteLine("Context " + inboxMessage.Context);
-            Console.WriteLine("Titel " + inboxMessage.Titel);
-            engine.SaveInboxMail(inboxMessage.Uid);
+            var inboxFilePath = engine.SaveInboxMail(inboxMessage.Uid);
+            var sentMessage = engine.GetLastSentMail();
 
-            if (sentMessage is not null && sentMessage.Uid != UniqueId.Invalid)
+            if (sentMessage.Uid != UniqueId.Invalid)
             {
                 engine.SaveSentMail(sentMessage.Uid);
             }
 
+            using var db = new DB.DBClientAdapter();
             db.SetNewMessage(
                 inboxMessage.Uid,
                 ComputeHash(inboxMessage.Context),
-                $"fghfh/dhfghf/ddghfh/{inboxMessage.Uid}.eml");
+                inboxFilePath);
         }
 
         public static string ComputeHash(string text)

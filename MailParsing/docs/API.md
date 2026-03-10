@@ -2,9 +2,9 @@
 
 This document describes the current behavior of all implemented methods in the project.
 
-## `src/main.cs`
+## `src/Program.cs`
 
-- `main.Main(string[] args)`: Console entry point that creates an `ImapEngine`, prints inbox/sent information, and exports the latest inbox and sent messages.
+- `Program.Main(string[] args)`: Console entry point that exports the latest inbox and sent messages, then stores inbox metadata in the database using the real exported file path.
 
 ## `src/Imap/ConfigLoader.cs`
 
@@ -27,14 +27,12 @@ This document describes the current behavior of all implemented methods in the p
 
 - `ImapEngine.ImapEngine()`: Creates engine defaults (`ImapService`, JSON config file, account key `bewerbung`).
 - `ImapEngine.ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey)`: Creates an engine with custom dependencies.
-- `ImapEngine.GetSendCount()`: Returns the message count from the sent folder.
-- `ImapEngine.GetInboxCount()`: Returns the message count from the inbox.
-- `ImapEngine.GetLastInboxMessage()`: Returns the latest inbox message as `MessageDto`; returns `UniqueId.Invalid` DTO when empty.
-- `ImapEngine.GetLastSentMail()`: Returns the latest sent message as `MessageDto`; returns `UniqueId.Invalid` DTO when empty.
+- `ImapEngine.GetLastInboxMessage()`: Returns the latest inbox message as a non-null `MessageDto`; returns a `UniqueId.Invalid` DTO when the inbox is empty.
+- `ImapEngine.GetLastSentMail()`: Returns the latest sent message as a non-null `MessageDto`; returns a `UniqueId.Invalid` DTO when the sent folder is empty.
 - `ImapEngine.GetAllUIDS(IImapFolder folder)`: Returns all UIDs found by `SearchQuery.All`.
 - `ImapEngine.GetLastUID(IImapFolder fold)`: Returns the last UID in folder search results, or `null` when empty.
-- `ImapEngine.SaveInboxMail(UniqueId uid)`: Exports an inbox message to `<savePath>/<uid>.eml`.
-- `ImapEngine.SaveSentMail(UniqueId uid)`: Exports a sent message to `<savePath>/<uid>.eml`.
+- `ImapEngine.SaveInboxMail(UniqueId uid)`: Exports an inbox message to `<savePath>/<uid>.eml` and returns the written file path.
+- `ImapEngine.SaveSentMail(UniqueId uid)`: Exports a sent message to `<savePath>/<uid>.eml` and returns the written file path.
 
 ## `src/Imap/MailKitImapClientAdapter.cs`
 

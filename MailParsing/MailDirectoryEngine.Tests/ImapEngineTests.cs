@@ -56,70 +56,7 @@ public class ImapEngineTests
     }
 
     [Fact]
-    public void GetSendCount_UsesSentFolderCount()
-    {
-        var sentFolder = new FakeImapFolder(
-            name: "Gesendete Elemente",
-            fullName: "Root/Gesendete Elemente",
-            count: 7);
-
-        var otherFolder = new FakeImapFolder(
-            name: "Other",
-            fullName: "Root/Other",
-            count: 3);
-
-        var root = new FakeImapFolder(
-            name: "Root",
-            fullName: "Root",
-            count: 0,
-            subfolders: new[] { otherFolder, sentFolder });
-
-        var inbox = new FakeImapFolder(
-            name: "Inbox",
-            fullName: "Inbox",
-            count: 12);
-
-        var client = new FakeImapClient('/', root, inbox);
-        var engine = new ImapEngine(
-            new FakeImapClientFactory(client),
-            new FakeConfigProvider(),
-            "bewerbung");
-
-        var count = engine.GetSendCount();
-
-        Assert.Equal(7, count);
-        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
-        Assert.True(client.DisconnectCalled);
-    }
-
-    [Fact]
-    public void GetInboxCount_UsesInboxCount()
-    {
-        var root = new FakeImapFolder(
-            name: "Root",
-            fullName: "Root",
-            count: 0);
-
-        var inbox = new FakeImapFolder(
-            name: "Inbox",
-            fullName: "Inbox",
-            count: 42);
-
-        var client = new FakeImapClient('/', root, inbox);
-        var engine = new ImapEngine(
-            new FakeImapClientFactory(client),
-            new FakeConfigProvider(),
-            "bewerbung");
-
-        var count = engine.GetInboxCount();
-
-        Assert.Equal(42, count);
-        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
-        Assert.True(client.DisconnectCalled);
-    }
-
-    [Fact]
-    public void GetSendCount_ThrowsWhenSentFolderMissing_AndDisconnects()
+    public void GetLastSentMail_ThrowsWhenSentFolderMissing_AndDisconnects()
     {
         var otherFolder = new FakeImapFolder(
             name: "Archive",
@@ -143,7 +80,7 @@ public class ImapEngineTests
             new FakeConfigProvider(),
             "bewerbung");
 
-        var ex = Assert.Throws<InvalidOperationException>(() => engine.GetSendCount());
+        var ex = Assert.Throws<InvalidOperationException>(() => engine.GetLastSentMail());
 
         Assert.Contains("Gesendete Elemente", ex.Message);
         Assert.True(client.DisconnectCalled);
@@ -178,8 +115,7 @@ public class ImapEngineTests
 
         var result = engine.GetLastInboxMessage();
 
-        Assert.NotNull(result);
-        Assert.Equal(newerUid, result!.Uid);
+        Assert.Equal(newerUid, result.Uid);
         Assert.Equal("new subject", result.Titel);
         Assert.Equal("<p>new html</p>", result.Context);
         Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
@@ -204,8 +140,7 @@ public class ImapEngineTests
 
         var result = engine.GetLastInboxMessage();
 
-        Assert.NotNull(result);
-        Assert.Equal(UniqueId.Invalid, result!.Uid);
+        Assert.Equal(UniqueId.Invalid, result.Uid);
         Assert.Equal(string.Empty, result.Titel);
         Assert.Equal(string.Empty, result.Context);
         Assert.True(client.DisconnectCalled);
@@ -246,8 +181,7 @@ public class ImapEngineTests
 
         var result = engine.GetLastSentMail();
 
-        Assert.NotNull(result);
-        Assert.Equal(newerUid, result!.Uid);
+        Assert.Equal(newerUid, result.Uid);
         Assert.Equal("newer sent subject", result.Titel);
         Assert.Equal("<p>newer sent html</p>", result.Context);
         Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
@@ -278,8 +212,7 @@ public class ImapEngineTests
 
         var result = engine.GetLastSentMail();
 
-        Assert.NotNull(result);
-        Assert.Equal(UniqueId.Invalid, result!.Uid);
+        Assert.Equal(UniqueId.Invalid, result.Uid);
         Assert.Equal(string.Empty, result.Titel);
         Assert.Equal(string.Empty, result.Context);
         Assert.True(client.DisconnectCalled);
@@ -350,6 +283,33 @@ public class ImapEngineTests
     }
 
     [Fact]
+    public void GetLastInboxMessage_UsesTextBody_WhenHtmlBodyMissing()
+    {
+        var uid = new UniqueId(21);
+        var message = CreateMessage("subject", "plain text body", htmlBody: null);
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            searchResults: new[] { uid },
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastInboxMessage();
+
+        Assert.Equal(uid, result.Uid);
+        Assert.Equal("plain text body", result.Context);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    [Fact]
     public void SaveInboxMail_WritesEmlFileToConfiguredPath()
     {
         var uid = new UniqueId(777);
@@ -372,9 +332,10 @@ public class ImapEngineTests
 
         try
         {
-            engine.SaveInboxMail(uid);
-
             var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
+            var savedFile = engine.SaveInboxMail(uid);
+
+            Assert.Equal(expectedFile, savedFile);
             Assert.True(File.Exists(expectedFile));
             Assert.Contains("Saved Subject", File.ReadAllText(expectedFile));
             Assert.True(client.DisconnectCalled);
@@ -475,9 +436,10 @@ public class ImapEngineTests
 
         try
         {
-            engine.SaveSentMail(uid);
-
             var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
+            var savedFile = engine.SaveSentMail(uid);
+
+            Assert.Equal(expectedFile, savedFile);
             Assert.True(File.Exists(expectedFile));
             Assert.Contains("Saved Sent Subject", File.ReadAllText(expectedFile));
             Assert.True(client.DisconnectCalled);
@@ -561,7 +523,7 @@ public class ImapEngineTests
         }
     }
 
-    private static MimeMessage CreateMessage(string subject, string textBody, string htmlBody)
+    private static MimeMessage CreateMessage(string subject, string? textBody, string? htmlBody)
     {
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse("sender@example.test"));
