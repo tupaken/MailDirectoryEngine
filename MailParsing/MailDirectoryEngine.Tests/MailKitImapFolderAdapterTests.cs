@@ -12,6 +12,9 @@ namespace MailDirectoryEngine.Tests;
 
 public class MailKitImapFolderAdapterTests
 {
+    /// <summary>
+    /// Verifies that constructing the folder adapter with a null folder throws.
+    /// </summary>
     [Fact]
     public void Constructor_Throws_WhenFolderIsNull()
     {
@@ -19,6 +22,9 @@ public class MailKitImapFolderAdapterTests
         Assert.Equal("folder", ex.ParamName);
     }
 
+    /// <summary>
+    /// Verifies that folder metadata properties proxy the underlying MailKit folder values.
+    /// </summary>
     [Fact]
     public void Name_FullName_AndCount_ProxyUnderlyingFolderValues()
     {
@@ -34,6 +40,9 @@ public class MailKitImapFolderAdapterTests
         Assert.Equal(42, adapter.Count);
     }
 
+    /// <summary>
+    /// Verifies that open requests are forwarded to the underlying folder.
+    /// </summary>
     [Fact]
     public void Open_DelegatesAccessMode()
     {
@@ -49,6 +58,9 @@ public class MailKitImapFolderAdapterTests
         Assert.Equal(FolderAccess.ReadOnly, proxy.LastOpenAccess);
     }
 
+    /// <summary>
+    /// Verifies that subfolders are returned as adapted <see cref="IImapFolder"/> instances.
+    /// </summary>
     [Fact]
     public void GetSubfolders_ReturnsAdaptedSubfolders()
     {
@@ -67,6 +79,9 @@ public class MailKitImapFolderAdapterTests
         Assert.Equal(new[] { "Archive", "Sent" }, result.Select(r => r.Name).ToArray());
     }
 
+    /// <summary>
+    /// Verifies that search results are forwarded unchanged from the underlying folder.
+    /// </summary>
     [Fact]
     public void Search_ReturnsConfiguredUids()
     {
@@ -82,6 +97,9 @@ public class MailKitImapFolderAdapterTests
         Assert.Equal(new[] { uid1, uid2 }, result);
     }
 
+    /// <summary>
+    /// Verifies that message retrieval returns the configured underlying MIME message.
+    /// </summary>
     [Fact]
     public void GetMessage_ReturnsConfiguredMessage()
     {
@@ -100,6 +118,13 @@ public class MailKitImapFolderAdapterTests
         Assert.Equal("Proxy Subject", result.Subject);
     }
 
+    /// <summary>
+    /// Creates a dispatch proxy and strongly typed helper used to emulate an <see cref="IMailFolder"/>.
+    /// </summary>
+    /// <param name="name">Folder display name.</param>
+    /// <param name="fullName">Folder full path.</param>
+    /// <param name="count">Reported message count.</param>
+    /// <returns>The proxied MailKit folder and its backing test proxy.</returns>
     private static (IMailFolder folder, TestMailFolderProxy proxy) CreateMailFolderProxy(
         string name,
         string fullName,
@@ -124,6 +149,12 @@ internal class TestMailFolderProxy : DispatchProxy
     public Dictionary<UniqueId, MimeMessage> Messages { get; } = new();
     public IList<IMailFolder> Subfolders { get; } = new List<IMailFolder>();
 
+    /// <summary>
+    /// Handles proxy member invocations for the test double.
+    /// </summary>
+    /// <param name="targetMethod">Method requested through the proxy.</param>
+    /// <param name="args">Arguments supplied to the proxied call.</param>
+    /// <returns>Configured return value matching the invoked member.</returns>
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
     {
         if (targetMethod is null)

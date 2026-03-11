@@ -7,6 +7,10 @@ namespace MailDirectoryEngine.src
 {
     internal class Program
     {
+        /// <summary>
+        /// Reads the latest inbox and sent messages, deduplicates them by hash, and persists new entries.
+        /// </summary>
+        /// <param name="args">Unused command-line arguments.</param>
         static void Main(string[] args)
         {
             Console.WriteLine("Main:");
@@ -30,6 +34,11 @@ namespace MailDirectoryEngine.src
 
         }
 
+        /// <summary>
+        /// Computes a SHA-256 hash for the provided text and returns it as an uppercase hexadecimal string.
+        /// </summary>
+        /// <param name="text">Message content to hash.</param>
+        /// <returns>Uppercase hexadecimal SHA-256 digest.</returns>
         public static string ComputeHash(string text)
         {
             using var sha256 = SHA256.Create();

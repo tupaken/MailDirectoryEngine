@@ -8,6 +8,9 @@ namespace MailDirectoryEngine.Tests;
 
 public class MailKitImapClientAdapterTests
 {
+    /// <summary>
+    /// Verifies that constructing the adapter with a null client throws.
+    /// </summary>
     [Fact]
     public void Constructor_Throws_WhenClientIsNull()
     {
@@ -15,6 +18,9 @@ public class MailKitImapClientAdapterTests
         Assert.Equal("client", ex.ParamName);
     }
 
+    /// <summary>
+    /// Verifies that reading the directory separator requires a personal namespace.
+    /// </summary>
     [Fact]
     public void DirectorySeparator_Throws_WhenNoPersonalNamespacesExist()
     {
@@ -26,6 +32,9 @@ public class MailKitImapClientAdapterTests
         Assert.Contains("personal namespace", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Verifies that the inbox property surfaces the underlying connectivity requirement.
+    /// </summary>
     [Fact]
     public void Inbox_Throws_WhenUnderlyingClientIsNotConnected()
     {
@@ -35,6 +44,9 @@ public class MailKitImapClientAdapterTests
         Assert.Throws<ServiceNotConnectedException>(() => _ = adapter.Inbox);
     }
 
+    /// <summary>
+    /// Verifies that resolving the personal root requires a personal namespace.
+    /// </summary>
     [Fact]
     public void GetPersonalRoot_Throws_WhenNoPersonalNamespacesExist()
     {
@@ -46,6 +58,9 @@ public class MailKitImapClientAdapterTests
         Assert.Contains("personal namespace", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Verifies that disconnect can be called safely on an unconnected client.
+    /// </summary>
     [Fact]
     public void Disconnect_DoesNotThrow_WhenUnderlyingClientIsNotConnected()
     {
@@ -55,6 +70,9 @@ public class MailKitImapClientAdapterTests
         adapter.Disconnect(true);
     }
 
+    /// <summary>
+    /// Verifies that disposing the adapter multiple times is safe.
+    /// </summary>
     [Fact]
     public void Dispose_CanBeCalledMultipleTimes()
     {

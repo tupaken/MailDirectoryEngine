@@ -162,6 +162,12 @@ namespace MailDirectoryEngine.src.Imap
             return UseClient(client => SaveMail(GetSent(client), uid));
         }
 
+        /// <summary>
+        /// Creates a client, executes the supplied action, and always disconnects the client afterwards.
+        /// </summary>
+        /// <typeparam name="T">Return type of the action.</typeparam>
+        /// <param name="action">Operation executed against the created client.</param>
+        /// <returns>Result produced by <paramref name="action"/>.</returns>
         private T UseClient<T>(Func<IImapClient, T> action)
         {
             var client = CreateClient();
@@ -175,6 +181,14 @@ namespace MailDirectoryEngine.src.Imap
             }
         }
 
+        /// <summary>
+        /// Loads the newest message from an opened folder.
+        /// </summary>
+        /// <param name="folder">Folder to inspect.</param>
+        /// <returns>
+        /// Latest message converted to <see cref="MessageDto"/>, or an empty DTO with <see cref="UniqueId.Invalid"/>
+        /// when the folder contains no messages.
+        /// </returns>
         private MessageDto GetLatestMessage(IImapFolder folder)
         {
             var lastUid = GetLastUID(folder);
@@ -187,6 +201,12 @@ namespace MailDirectoryEngine.src.Imap
             return CreateMessageDto(lastUid.Value, message);
         }
 
+        /// <summary>
+        /// Projects a MIME message into the lightweight message DTO used by the application.
+        /// </summary>
+        /// <param name="uid">Unique identifier of the message.</param>
+        /// <param name="message">MIME message returned by MailKit.</param>
+        /// <returns>DTO containing UID, subject, and preferred body content.</returns>
         private static MessageDto CreateMessageDto(UniqueId uid, MimeKit.MimeMessage message)
         {
             return new MessageDto(
@@ -195,6 +215,12 @@ namespace MailDirectoryEngine.src.Imap
                 message.HtmlBody ?? message.TextBody ?? "");
         }
 
+        /// <summary>
+        /// Saves the specified message from a folder as an <c>.eml</c> file in the configured export directory.
+        /// </summary>
+        /// <param name="folder">Folder containing the message.</param>
+        /// <param name="uid">Unique identifier of the message to export.</param>
+        /// <returns>Full path to the written <c>.eml</c> file.</returns>
         private string SaveMail(IImapFolder folder, UniqueId uid)
         {
             var message = folder.GetMessage(uid);
@@ -206,6 +232,13 @@ namespace MailDirectoryEngine.src.Imap
             return filePath;
         }
 
+        /// <summary>
+        /// Resolves and creates the export directory used for saved mail files.
+        /// </summary>
+        /// <returns>Absolute path to the export directory.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no save path is configured.
+        /// </exception>
         private string GetSaveDirectory()
         {
             var directory = _configProvider.GetSavePath();

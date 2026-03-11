@@ -10,6 +10,9 @@ public class ConfigProviderTests
 {
     private static readonly object EnvLock = new();
 
+    /// <summary>
+    /// Verifies that the JSON config provider rejects blank file paths.
+    /// </summary>
     [Fact]
     public void JsonImapConfigProvider_ThrowsForEmptyPath()
     {
@@ -17,6 +20,9 @@ public class ConfigProviderTests
         Assert.Equal("path", ex.ParamName);
     }
 
+    /// <summary>
+    /// Verifies that account configuration is loaded correctly from JSON.
+    /// </summary>
     [Fact]
     public void JsonImapConfigProvider_GetConfig_ReturnsAccountConfiguration()
     {
@@ -52,6 +58,9 @@ public class ConfigProviderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that blank account keys are rejected.
+    /// </summary>
     [Fact]
     public void JsonImapConfigProvider_GetConfig_ThrowsForBlankKey()
     {
@@ -83,6 +92,9 @@ public class ConfigProviderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that requesting an unknown account key throws an exception.
+    /// </summary>
     [Fact]
     public void JsonImapConfigProvider_ThrowsForUnknownKey()
     {
@@ -113,6 +125,9 @@ public class ConfigProviderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that configuration keys are deserialized case-insensitively.
+    /// </summary>
     [Fact]
     public void ConfigLoader_LoadsAccountsCaseInsensitive()
     {
@@ -147,6 +162,9 @@ public class ConfigProviderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that invalid JSON content is surfaced as a deserialization error.
+    /// </summary>
     [Fact]
     public void ConfigLoader_Load_ThrowsForInvalidJson()
     {
@@ -163,6 +181,9 @@ public class ConfigProviderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that the configured save path is returned from JSON settings.
+    /// </summary>
     [Fact]
     public void JsonImapConfigProvider_GetSavePath_ReturnsConfiguredPath()
     {
@@ -198,6 +219,9 @@ public class ConfigProviderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that the save path falls back to the environment variable when JSON does not provide one.
+    /// </summary>
     [Fact]
     public void JsonImapConfigProvider_GetSavePath_FallsBackToEnvironmentVariable()
     {
@@ -238,6 +262,9 @@ public class ConfigProviderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that missing save path configuration in both JSON and environment causes an error.
+    /// </summary>
     [Fact]
     public void JsonImapConfigProvider_GetSavePath_ThrowsWhenMissingInJsonAndEnv()
     {
