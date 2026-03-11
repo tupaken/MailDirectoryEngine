@@ -7,8 +7,12 @@ namespace MailDirectoryEngine.src.DB
     {
         NpgsqlConnection? Connection { get; set; }
 
-        long? GetLastId();
+        void SetNewInboxMessage(string hash, string content);
 
-        void SetNewMessage(UniqueId uid ,string hash, string path);
+        bool CheckHashInbox(string hash);
+
+        void SetNewSendMessage(string hash, string path);
+
+        bool CheckHashSend(string hash);
     }
 }

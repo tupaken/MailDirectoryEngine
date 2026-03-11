@@ -3,6 +3,7 @@ using System.IO;
 using Npgsql;
 using DotNetEnv;
 using MailKit;
+using Microsoft.VisualBasic;
 
 namespace MailDirectoryEngine.src.DB
 {
@@ -10,7 +11,8 @@ namespace MailDirectoryEngine.src.DB
     {
         public NpgsqlConnection? Connection { get; set; }
 
-        
+        string inbox= "e_mails_inbox";
+        string send="e_mails_send";
 
         public DBClientAdapter()
         {
@@ -30,24 +32,48 @@ namespace MailDirectoryEngine.src.DB
             Connection = new NpgsqlConnection(ConnectionString);
             Connection.Open();
         }
+    
 
-        public long? GetLastId()
-        {
-            using var cmd = new NpgsqlCommand("SELECT MAX(uid) FROM e_mails;", Connection);
-            var result = cmd.ExecuteScalar();
-            return result is null || result is DBNull ? null : Convert.ToInt64(result);
-        }
-
-        public void SetNewMessage(UniqueId uid,string hash, string path)
+        public void SetNewInboxMessage(string hash, string content)
         {
             using var cmd = new NpgsqlCommand(
-                "INSERT INTO e_mails(uid,hash, path) VALUES (@uid,@hash, @path);", Connection);
-            cmd.Parameters.AddWithValue("@uid", (long)uid.Id);
+                $"INSERT INTO {inbox}(hash,content) VALUES (@hash, @content);", Connection);
             cmd.Parameters.AddWithValue("@hash", hash);
-            cmd.Parameters.AddWithValue("@path", path);
+            cmd.Parameters.AddWithValue("@content", content);
             cmd.ExecuteNonQuery();
         }
 
+        public bool  CheckHashInbox(string hash)
+        {
+            using var cmd = new NpgsqlCommand(
+                $"SELECT EXISTS (SELECT 1 FROM {inbox} WHERE hash = @hash);"
+                ,Connection);
+            cmd.Parameters.AddWithValue("@hash", hash);
+            
+            return (bool)cmd.ExecuteScalar() ? true:false;
+        }
+
+        
         public void Dispose() => Connection?.Dispose();
+
+        public void SetNewSendMessage(string hash, string path)
+        {
+            using var cmd = new NpgsqlCommand(
+                $"INSERT INTO {send}(hash,path) VALUES (@hash, @path);",
+            Connection);
+            cmd.Parameters.AddWithValue("@hash",hash);
+            cmd.Parameters.AddWithValue("@path",path);
+            cmd.ExecuteNonQuery();
+        }
+
+        public bool CheckHashSend(string hash)
+        {
+            using var cmd = new NpgsqlCommand(
+                $"SELECT EXISTS (SELECT 1 FROM {send} WHERE hash = @hash);"
+                ,Connection);
+            cmd.Parameters.AddWithValue("@hash", hash);
+            return (bool)cmd.ExecuteScalar();
+        }
+
     }
 }

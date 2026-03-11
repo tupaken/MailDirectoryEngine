@@ -11,27 +11,23 @@ namespace MailDirectoryEngine.src
         {
             Console.WriteLine("Main:");
             var engine = new Imap.ImapEngine();
-            var inboxMessage = engine.GetLastInboxMessage();
+            var db = new DB.DBClientAdapter();
 
-            if (inboxMessage.Uid == UniqueId.Invalid)
+            var lastIM=engine.GetLastInboxMessage().Context;
+            var hashIM=ComputeHash(lastIM);
+            if (!db.CheckHashInbox(hashIM))
             {
-                Console.WriteLine("Keine Inbox-Nachricht gefunden.");
-                return;
+                db.SetNewInboxMessage(hashIM,lastIM);
             }
 
-            var inboxFilePath = engine.SaveInboxMail(inboxMessage.Uid);
-            var sentMessage = engine.GetLastSentMail();
-
-            if (sentMessage.Uid != UniqueId.Invalid)
+            var lastSM=engine.GetLastSentMail();
+            var hashSM=ComputeHash(lastSM.Context);
+            if (!db.CheckHashSend(hashSM))
             {
-                engine.SaveSentMail(sentMessage.Uid);
+                engine.SaveSentMail(lastSM.Uid);
+                db.SetNewSendMessage(hashSM,hashSM);
             }
 
-            using var db = new DB.DBClientAdapter();
-            db.SetNewMessage(
-                inboxMessage.Uid,
-                ComputeHash(inboxMessage.Context),
-                inboxFilePath);
         }
 
         public static string ComputeHash(string text)

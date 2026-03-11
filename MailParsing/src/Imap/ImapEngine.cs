@@ -117,18 +117,6 @@ namespace MailDirectoryEngine.src.Imap
         }
 
         /// <summary>
-        /// Exports the specified inbox message as an <c>.eml</c> file.
-        /// </summary>
-        /// <param name="uid">UID of the message to export.</param>
-        /// <exception cref="InvalidOperationException">
-        /// Thrown when no save path is configured.
-        /// </exception>
-        public string SaveInboxMail(UniqueId uid)
-        {
-            return UseClient(client => SaveMail(GetInbox(client), uid));
-        }
-
-        /// <summary>
         /// Opens and returns the inbox folder in read-only mode.
         /// </summary>
         /// <param name="client">Connected IMAP client.</param>
