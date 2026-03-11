@@ -121,7 +121,7 @@ namespace MailDirectoryEngine.src.Imap
         /// </summary>
         /// <param name="client">Connected IMAP client.</param>
         /// <returns>Opened inbox folder abstraction.</returns>
-        private IImapFolder GetInbox(IImapClient client)
+        public IImapFolder GetInbox(IImapClient client)
         {
             var inbox = client.Inbox;
             inbox.Open(FolderAccess.ReadOnly);
@@ -134,7 +134,7 @@ namespace MailDirectoryEngine.src.Imap
         /// <param name="client">Connected IMAP client.</param>
         /// <returns>Opened sent folder abstraction.</returns>
         /// <exception cref="InvalidOperationException"></exception>
-        private IImapFolder GetSent(IImapClient client)
+        public IImapFolder GetSent(IImapClient client)
         {
             var root = client.GetPersonalRoot();
             var separator = client.DirectorySeparator;
@@ -248,6 +248,54 @@ namespace MailDirectoryEngine.src.Imap
             directory = Path.GetFullPath(Environment.ExpandEnvironmentVariables(directory));
             Directory.CreateDirectory(directory);
             return directory;
+        }
+
+        /// <summary>
+        /// Reads all UIDs currently available in the inbox.
+        /// </summary>
+        /// <returns>Inbox message UIDs in server order.</returns>
+        public IList<UniqueId> GetAllUIDInbox()
+        {
+            return UseClient(client => GetAllUIDS(GetInbox(client)));
+        }
+
+        /// <summary>
+        /// Reads all UIDs currently available in the sent folder.
+        /// </summary>
+        /// <returns>Sent message UIDs in server order.</returns>
+        public IList<UniqueId> GetAllUIDSent()
+        {
+            return UseClient(client => GetAllUIDS(GetSent(client)));
+        }
+
+        /// <summary>
+        /// Loads a specific inbox message while the IMAP client is still connected.
+        /// </summary>
+        /// <param name="id">UID of the inbox message to load.</param>
+        /// <returns>Loaded inbox message as a DTO.</returns>
+        public MessageDto GetInboxMessage(UniqueId id)
+        {
+            return UseClient(client =>
+            {
+                var inbox = GetInbox(client);
+                var message = inbox.GetMessage(id);
+                return CreateMessageDto(id, message);
+            });
+        }
+
+        /// <summary>
+        /// Loads a specific sent message while the IMAP client is still connected.
+        /// </summary>
+        /// <param name="id">UID of the sent message to load.</param>
+        /// <returns>Loaded sent message as a DTO.</returns>
+        public MessageDto GetSentMessage(UniqueId id)
+        {
+            return UseClient(client =>
+            {
+                var sent = GetSent(client);
+                var message = sent.GetMessage(id);
+                return CreateMessageDto(id, message);
+            });
         }
     }
 }

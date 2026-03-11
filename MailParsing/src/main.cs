@@ -1,6 +1,8 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using MailDirectoryEngine.src.DB;
+using MailDirectoryEngine.src.Imap;
 using MailKit;
 
 namespace MailDirectoryEngine.src
@@ -17,21 +19,11 @@ namespace MailDirectoryEngine.src
             var engine = new Imap.ImapEngine();
             var db = new DB.DBClientAdapter();
 
-            var lastIM=engine.GetLastInboxMessage().Context;
-            var hashIM=ComputeHash(lastIM);
-            if (!db.CheckHashInbox(hashIM))
-            {
-                db.SetNewInboxMessage(hashIM,lastIM);
-            }
+            var allUidInbox=engine.GetAllUIDInbox();
+            InboxEMails(engine,db,allUidInbox);
 
-            var lastSM=engine.GetLastSentMail();
-            var hashSM=ComputeHash(lastSM.Context);
-            if (!db.CheckHashSend(hashSM))
-            {
-                engine.SaveSentMail(lastSM.Uid);
-                db.SetNewSendMessage(hashSM,hashSM);
-            }
-
+            var allUidSent = engine.GetAllUIDSent();
+            SentEmails(engine,db,allUidSent);
         }
 
         /// <summary>
@@ -45,6 +37,54 @@ namespace MailDirectoryEngine.src
             byte[] bytes = Encoding.UTF8.GetBytes(text);
             byte[] hash = sha256.ComputeHash(bytes);
             return Convert.ToHexString(hash);
+        }
+
+        /// <summary>
+        /// Persists all new inbox messages until a known hash is encountered.
+        /// </summary>
+        /// <param name="engine">IMAP engine used to load inbox messages.</param>
+        /// <param name="db">Database client used for deduplication and persistence.</param>
+        /// <param name="Ids">Inbox UIDs in server order.</param>
+        public static void InboxEMails(ImapEngine engine, DBClientAdapter db,IList<UniqueId> Ids)
+        {
+            if (Ids.Count == 0)
+            {
+                return;
+            }
+
+            var IMId=Ids[^1];
+            var IMCont=engine.GetInboxMessage(IMId).Context;
+            var hashIM=ComputeHash(IMCont);
+            if (!db.CheckHashInbox(hashIM))
+            {   
+                var newIds =Ids.Take(Ids.Count - 1).ToList();
+                InboxEMails(engine,db,newIds);
+                db.SetNewInboxMessage(hashIM,IMCont);
+            }
+        }
+
+        /// <summary>
+        /// Persists all new sent messages until a known hash is encountered.
+        /// </summary>
+        /// <param name="engine">IMAP engine used to load sent messages.</param>
+        /// <param name="db">Database client used for deduplication and persistence.</param>
+        /// <param name="Ids">Sent message UIDs in server order.</param>
+        public static void SentEmails(ImapEngine engine, DBClientAdapter db,IList<UniqueId> Ids)
+        {
+            if (Ids.Count == 0)
+            {
+                return;
+            }
+
+            var SId=Ids[^1];
+            var SCont=engine.GetSentMessage(SId).Context;
+            var hashIM=ComputeHash(SCont);
+            if (!db.CheckHashSend(hashIM))
+            {   
+                var newIds =Ids.Take(Ids.Count - 1).ToList();
+                SentEmails(engine,db,newIds);
+                db.SetNewSendMessage(hashIM,SCont);
+            }
         }
     }
 }
