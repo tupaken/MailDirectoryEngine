@@ -12,6 +12,9 @@ namespace MailDirectoryEngine.Tests;
 
 public class ImapEngineTests
 {
+    /// <summary>
+    /// Verifies that the default IMAP engine constructor creates an instance.
+    /// </summary>
     [Fact]
     public void DefaultConstructor_CreatesInstance()
     {
@@ -19,6 +22,9 @@ public class ImapEngineTests
         Assert.NotNull(engine);
     }
 
+    /// <summary>
+    /// Verifies that a null client factory is rejected.
+    /// </summary>
     [Fact]
     public void Constructor_Throws_WhenClientFactoryIsNull()
     {
@@ -31,6 +37,9 @@ public class ImapEngineTests
         Assert.Equal("clientFactory", ex.ParamName);
     }
 
+    /// <summary>
+    /// Verifies that a null configuration provider is rejected.
+    /// </summary>
     [Fact]
     public void Constructor_Throws_WhenConfigProviderIsNull()
     {
@@ -43,6 +52,9 @@ public class ImapEngineTests
         Assert.Equal("configProvider", ex.ParamName);
     }
 
+    /// <summary>
+    /// Verifies that a blank account key is rejected.
+    /// </summary>
     [Fact]
     public void Constructor_Throws_WhenAccountKeyIsBlank()
     {
@@ -55,71 +67,11 @@ public class ImapEngineTests
         Assert.Equal("accountKey", ex.ParamName);
     }
 
+    /// <summary>
+    /// Verifies that missing sent folders throw and still disconnect the client.
+    /// </summary>
     [Fact]
-    public void GetSendCount_UsesSentFolderCount()
-    {
-        var sentFolder = new FakeImapFolder(
-            name: "Gesendete Elemente",
-            fullName: "Root/Gesendete Elemente",
-            count: 7);
-
-        var otherFolder = new FakeImapFolder(
-            name: "Other",
-            fullName: "Root/Other",
-            count: 3);
-
-        var root = new FakeImapFolder(
-            name: "Root",
-            fullName: "Root",
-            count: 0,
-            subfolders: new[] { otherFolder, sentFolder });
-
-        var inbox = new FakeImapFolder(
-            name: "Inbox",
-            fullName: "Inbox",
-            count: 12);
-
-        var client = new FakeImapClient('/', root, inbox);
-        var engine = new ImapEngine(
-            new FakeImapClientFactory(client),
-            new FakeConfigProvider(),
-            "bewerbung");
-
-        var count = engine.GetSendCount();
-
-        Assert.Equal(7, count);
-        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
-        Assert.True(client.DisconnectCalled);
-    }
-
-    [Fact]
-    public void GetInboxCount_UsesInboxCount()
-    {
-        var root = new FakeImapFolder(
-            name: "Root",
-            fullName: "Root",
-            count: 0);
-
-        var inbox = new FakeImapFolder(
-            name: "Inbox",
-            fullName: "Inbox",
-            count: 42);
-
-        var client = new FakeImapClient('/', root, inbox);
-        var engine = new ImapEngine(
-            new FakeImapClientFactory(client),
-            new FakeConfigProvider(),
-            "bewerbung");
-
-        var count = engine.GetInboxCount();
-
-        Assert.Equal(42, count);
-        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
-        Assert.True(client.DisconnectCalled);
-    }
-
-    [Fact]
-    public void GetSendCount_ThrowsWhenSentFolderMissing_AndDisconnects()
+    public void GetLastSentMail_ThrowsWhenSentFolderMissing_AndDisconnects()
     {
         var otherFolder = new FakeImapFolder(
             name: "Archive",
@@ -143,12 +95,15 @@ public class ImapEngineTests
             new FakeConfigProvider(),
             "bewerbung");
 
-        var ex = Assert.Throws<InvalidOperationException>(() => engine.GetSendCount());
+        var ex = Assert.Throws<InvalidOperationException>(() => engine.GetLastSentMail());
 
         Assert.Contains("Gesendete Elemente", ex.Message);
         Assert.True(client.DisconnectCalled);
     }
 
+    /// <summary>
+    /// Verifies that the newest inbox message is returned with HTML content preferred over plain text.
+    /// </summary>
     [Fact]
     public void GetLastInboxMessage_ReturnsNewestMessage()
     {
@@ -178,14 +133,16 @@ public class ImapEngineTests
 
         var result = engine.GetLastInboxMessage();
 
-        Assert.NotNull(result);
-        Assert.Equal(newerUid, result!.Uid);
+        Assert.Equal(newerUid, result.Uid);
         Assert.Equal("new subject", result.Titel);
         Assert.Equal("<p>new html</p>", result.Context);
         Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
         Assert.True(client.DisconnectCalled);
     }
 
+    /// <summary>
+    /// Verifies that an empty inbox produces the invalid message DTO.
+    /// </summary>
     [Fact]
     public void GetLastInboxMessage_ReturnsInvalid_WhenInboxEmpty()
     {
@@ -204,13 +161,15 @@ public class ImapEngineTests
 
         var result = engine.GetLastInboxMessage();
 
-        Assert.NotNull(result);
-        Assert.Equal(UniqueId.Invalid, result!.Uid);
+        Assert.Equal(UniqueId.Invalid, result.Uid);
         Assert.Equal(string.Empty, result.Titel);
         Assert.Equal(string.Empty, result.Context);
         Assert.True(client.DisconnectCalled);
     }
 
+    /// <summary>
+    /// Verifies that the newest sent message is resolved from the sent folder.
+    /// </summary>
     [Fact]
     public void GetLastSentMail_ReturnsNewestMessage()
     {
@@ -246,14 +205,16 @@ public class ImapEngineTests
 
         var result = engine.GetLastSentMail();
 
-        Assert.NotNull(result);
-        Assert.Equal(newerUid, result!.Uid);
+        Assert.Equal(newerUid, result.Uid);
         Assert.Equal("newer sent subject", result.Titel);
         Assert.Equal("<p>newer sent html</p>", result.Context);
         Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
         Assert.True(client.DisconnectCalled);
     }
 
+    /// <summary>
+    /// Verifies that an empty sent folder produces the invalid message DTO.
+    /// </summary>
     [Fact]
     public void GetLastSentMail_ReturnsInvalid_WhenSentFolderEmpty()
     {
@@ -278,13 +239,15 @@ public class ImapEngineTests
 
         var result = engine.GetLastSentMail();
 
-        Assert.NotNull(result);
-        Assert.Equal(UniqueId.Invalid, result!.Uid);
+        Assert.Equal(UniqueId.Invalid, result.Uid);
         Assert.Equal(string.Empty, result.Titel);
         Assert.Equal(string.Empty, result.Context);
         Assert.True(client.DisconnectCalled);
     }
 
+    /// <summary>
+    /// Verifies that all UIDs returned by folder search are exposed unchanged.
+    /// </summary>
     [Fact]
     public void GetAllUIDS_ReturnsAllUidsFromFolderSearch()
     {
@@ -307,6 +270,73 @@ public class ImapEngineTests
         Assert.Equal(new[] { uid1, uid2 }, result);
     }
 
+    /// <summary>
+    /// Verifies that inbox UID listing opens the inbox, returns the server order, and disconnects the client.
+    /// </summary>
+    [Fact]
+    public void GetAllUIDInbox_ReturnsInboxUids_AndDisconnects()
+    {
+        var uid1 = new UniqueId(41);
+        var uid2 = new UniqueId(42);
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 2,
+            searchResults: new[] { uid1, uid2 });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetAllUIDInbox();
+
+        Assert.Equal(new[] { uid1, uid2 }, result);
+        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that sent UID listing resolves the sent folder by full-name suffix and disconnects the client.
+    /// </summary>
+    [Fact]
+    public void GetAllUIDSent_ReturnsSentUids_FromFullNameSuffixMatch()
+    {
+        var uid1 = new UniqueId(51);
+        var uid2 = new UniqueId(52);
+
+        var sentFolder = new FakeImapFolder(
+            name: "Archive",
+            fullName: "Root.Gesendete Elemente",
+            count: 2,
+            searchResults: new[] { uid1, uid2 });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetAllUIDSent();
+
+        Assert.Equal(new[] { uid1, uid2 }, result);
+        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that folders without messages return no last UID.
+    /// </summary>
     [Fact]
     public void GetLastUID_ReturnsNull_WhenFolderContainsNoMessages()
     {
@@ -326,6 +356,9 @@ public class ImapEngineTests
         Assert.Null(result);
     }
 
+    /// <summary>
+    /// Verifies that the final UID from the search result is returned as the newest message.
+    /// </summary>
     [Fact]
     public void GetLastUID_ReturnsLastUid_WhenFolderContainsMessages()
     {
@@ -349,6 +382,107 @@ public class ImapEngineTests
         Assert.Equal(uid3, result);
     }
 
+    /// <summary>
+    /// Verifies that plain-text content is used when an inbox message has no HTML body.
+    /// </summary>
+    [Fact]
+    public void GetLastInboxMessage_UsesTextBody_WhenHtmlBodyMissing()
+    {
+        var uid = new UniqueId(21);
+        var message = CreateMessage("subject", "plain text body", htmlBody: null);
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            searchResults: new[] { uid },
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetLastInboxMessage();
+
+        Assert.Equal(uid, result.Uid);
+        Assert.Equal("plain text body", result.Context);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that a specific inbox message can be loaded while the client lifecycle is managed by the engine.
+    /// </summary>
+    [Fact]
+    public void GetInboxMessage_ReturnsRequestedMessage_AndDisconnects()
+    {
+        var uid = new UniqueId(61);
+        var message = CreateMessage("Inbox Subject", "Inbox text", "<p>Inbox html</p>");
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetInboxMessage(uid);
+
+        Assert.Equal(uid, result.Uid);
+        Assert.Equal("Inbox Subject", result.Titel);
+        Assert.Equal("<p>Inbox html</p>", result.Context);
+        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that a specific sent message can be loaded while the client lifecycle is managed by the engine.
+    /// </summary>
+    [Fact]
+    public void GetSentMessage_ReturnsRequestedMessage_AndDisconnects()
+    {
+        var uid = new UniqueId(71);
+        var message = CreateMessage("Sent Subject", "Sent text", "<p>Sent html</p>");
+
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetSentMessage(uid);
+
+        Assert.Equal(uid, result.Uid);
+        Assert.Equal("Sent Subject", result.Titel);
+        Assert.Equal("<p>Sent html</p>", result.Context);
+        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that inbox messages are exported to the configured directory.
+    /// </summary>
     [Fact]
     public void SaveInboxMail_WritesEmlFileToConfiguredPath()
     {
@@ -372,9 +506,10 @@ public class ImapEngineTests
 
         try
         {
-            engine.SaveInboxMail(uid);
-
             var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
+            var savedFile = engine.SaveInboxMail(uid);
+
+            Assert.Equal(expectedFile, savedFile);
             Assert.True(File.Exists(expectedFile));
             Assert.Contains("Saved Subject", File.ReadAllText(expectedFile));
             Assert.True(client.DisconnectCalled);
@@ -386,6 +521,9 @@ public class ImapEngineTests
         }
     }
 
+    /// <summary>
+    /// Verifies that saving inbox mail fails when no save path is configured and still disconnects the client.
+    /// </summary>
     [Fact]
     public void SaveInboxMail_ThrowsWhenSavePathMissing_AndDisconnects()
     {
@@ -411,6 +549,9 @@ public class ImapEngineTests
         Assert.True(client.DisconnectCalled);
     }
 
+    /// <summary>
+    /// Verifies that saving inbox mail fails when the requested UID does not exist and still disconnects the client.
+    /// </summary>
     [Fact]
     public void SaveInboxMail_ThrowsWhenUidNotFound_AndDisconnects()
     {
@@ -446,6 +587,9 @@ public class ImapEngineTests
         }
     }
 
+    /// <summary>
+    /// Verifies that sent messages are exported to the configured directory.
+    /// </summary>
     [Fact]
     public void SaveSentMail_WritesEmlFileToConfiguredPath()
     {
@@ -475,9 +619,10 @@ public class ImapEngineTests
 
         try
         {
-            engine.SaveSentMail(uid);
-
             var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
+            var savedFile = engine.SaveSentMail(uid);
+
+            Assert.Equal(expectedFile, savedFile);
             Assert.True(File.Exists(expectedFile));
             Assert.Contains("Saved Sent Subject", File.ReadAllText(expectedFile));
             Assert.True(client.DisconnectCalled);
@@ -489,6 +634,9 @@ public class ImapEngineTests
         }
     }
 
+    /// <summary>
+    /// Verifies that saving sent mail fails when no save path is configured and still disconnects the client.
+    /// </summary>
     [Fact]
     public void SaveSentMail_ThrowsWhenSavePathMissing_AndDisconnects()
     {
@@ -520,6 +668,9 @@ public class ImapEngineTests
         Assert.True(client.DisconnectCalled);
     }
 
+    /// <summary>
+    /// Verifies that saving sent mail fails when the requested UID does not exist and still disconnects the client.
+    /// </summary>
     [Fact]
     public void SaveSentMail_ThrowsWhenUidNotFound_AndDisconnects()
     {
@@ -561,7 +712,14 @@ public class ImapEngineTests
         }
     }
 
-    private static MimeMessage CreateMessage(string subject, string textBody, string htmlBody)
+    /// <summary>
+    /// Creates a MIME message used by the IMAP engine tests.
+    /// </summary>
+    /// <param name="subject">Subject line for the generated message.</param>
+    /// <param name="textBody">Plain-text body content.</param>
+    /// <param name="htmlBody">HTML body content.</param>
+    /// <returns>Configured MIME message instance.</returns>
+    private static MimeMessage CreateMessage(string subject, string? textBody, string? htmlBody)
     {
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse("sender@example.test"));
@@ -583,11 +741,20 @@ internal sealed class FakeImapClientFactory : IImapClientFactory
 {
     private readonly IImapClient _client;
 
+    /// <summary>
+    /// Initializes the fake factory with the client instance returned for every request.
+    /// </summary>
+    /// <param name="client">Client instance returned by <see cref="Create(ImapConfig)"/>.</param>
     public FakeImapClientFactory(IImapClient client)
     {
         _client = client;
     }
 
+    /// <summary>
+    /// Returns the preconfigured fake client.
+    /// </summary>
+    /// <param name="config">Ignored IMAP configuration.</param>
+    /// <returns>The fake client supplied to the constructor.</returns>
     public IImapClient Create(ImapConfig config)
     {
         return _client;
@@ -598,11 +765,20 @@ internal sealed class FakeConfigProvider : IImapConfigProvider
 {
     private readonly string _savePath;
 
+    /// <summary>
+    /// Initializes the fake config provider with a configurable export path.
+    /// </summary>
+    /// <param name="savePath">Save path returned by <see cref="GetSavePath"/>.</param>
     public FakeConfigProvider(string savePath = @"C:\Temp\mail-export")
     {
         _savePath = savePath;
     }
 
+    /// <summary>
+    /// Returns a fixed IMAP configuration for tests.
+    /// </summary>
+    /// <param name="key">Ignored account key.</param>
+    /// <returns>Static configuration values for the fake account.</returns>
     public ImapConfig GetConfig(string key)
     {
         return new ImapConfig
@@ -614,6 +790,10 @@ internal sealed class FakeConfigProvider : IImapConfigProvider
         };
     }
 
+    /// <summary>
+    /// Returns the configured fake save path.
+    /// </summary>
+    /// <returns>Save path configured for the test double.</returns>
     public string GetSavePath()
     {
         return _savePath;
@@ -624,6 +804,12 @@ internal sealed class FakeImapClient : IImapClient
 {
     private readonly IImapFolder _root;
 
+    /// <summary>
+    /// Initializes the fake IMAP client with deterministic folder structure data.
+    /// </summary>
+    /// <param name="directorySeparator">Directory separator exposed by the fake client.</param>
+    /// <param name="root">Root folder returned by <see cref="GetPersonalRoot"/>.</param>
+    /// <param name="inbox">Inbox folder returned by <see cref="Inbox"/>.</param>
     public FakeImapClient(char directorySeparator, IImapFolder root, IImapFolder inbox)
     {
         DirectorySeparator = directorySeparator;
@@ -635,16 +821,27 @@ internal sealed class FakeImapClient : IImapClient
     public IImapFolder Inbox { get; }
     public bool DisconnectCalled { get; private set; }
 
+    /// <summary>
+    /// Returns the configured fake personal root folder.
+    /// </summary>
+    /// <returns>The root folder configured for the test.</returns>
     public IImapFolder GetPersonalRoot()
     {
         return _root;
     }
 
+    /// <summary>
+    /// Marks the fake client as disconnected.
+    /// </summary>
+    /// <param name="quit">Ignored disconnect flag.</param>
     public void Disconnect(bool quit)
     {
         DisconnectCalled = true;
     }
 
+    /// <summary>
+    /// Disposes the fake client. No action is required for the test double.
+    /// </summary>
     public void Dispose()
     {
     }
@@ -656,6 +853,15 @@ internal sealed class FakeImapFolder : IImapFolder
     private readonly List<UniqueId> _searchResults;
     private readonly Dictionary<UniqueId, MimeMessage> _messages;
 
+    /// <summary>
+    /// Initializes a fake folder with predefined search results, messages, and subfolders.
+    /// </summary>
+    /// <param name="name">Display name of the folder.</param>
+    /// <param name="fullName">Full path of the folder.</param>
+    /// <param name="count">Message count reported by the folder.</param>
+    /// <param name="subfolders">Optional child folders.</param>
+    /// <param name="searchResults">Optional search result UIDs.</param>
+    /// <param name="messages">Optional message map keyed by UID.</param>
     public FakeImapFolder(
         string name,
         string fullName,
@@ -679,11 +885,20 @@ internal sealed class FakeImapFolder : IImapFolder
     public int Count { get; }
     public FolderAccess? LastOpenAccess { get; private set; }
 
+    /// <summary>
+    /// Records the last access mode used to open the folder.
+    /// </summary>
+    /// <param name="access">Requested folder access level.</param>
     public void Open(FolderAccess access)
     {
         LastOpenAccess = access;
     }
 
+    /// <summary>
+    /// Returns configured child folders, optionally including nested descendants.
+    /// </summary>
+    /// <param name="recursive">Whether nested subfolders should be included.</param>
+    /// <returns>Configured child folders.</returns>
     public IEnumerable<IImapFolder> GetSubfolders(bool recursive)
     {
         if (!recursive)
@@ -707,11 +922,24 @@ internal sealed class FakeImapFolder : IImapFolder
         return all;
     }
 
+    /// <summary>
+    /// Returns the configured search result list.
+    /// </summary>
+    /// <param name="query">Ignored search query.</param>
+    /// <returns>Configured UID search results.</returns>
     public IList<UniqueId> Search(SearchQuery query)
     {
         return _searchResults.ToList();
     }
 
+    /// <summary>
+    /// Returns the configured message for the requested UID.
+    /// </summary>
+    /// <param name="uid">Message identifier to resolve.</param>
+    /// <returns>Configured MIME message.</returns>
+    /// <exception cref="KeyNotFoundException">
+    /// Thrown when no message was configured for the requested UID.
+    /// </exception>
     public MimeMessage GetMessage(UniqueId uid)
     {
         if (_messages.TryGetValue(uid, out var message))

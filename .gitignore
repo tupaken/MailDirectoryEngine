@@ -1,0 +1,27 @@
+# Root local environment files
+.env
+.ENV
+.env.*
+!.env.example
+!.env.*.example
+
+# Module-local environment files
+**/.env
+**/.ENV
+
+# Local Docker/Postgres volume data
+db-data/
+**/db-data/
+postgres-data/
+**/postgres-data/
+
+# Local Docker compose overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

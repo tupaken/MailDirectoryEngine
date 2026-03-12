@@ -4,7 +4,27 @@ This document describes the current behavior of all implemented methods in the p
 
 ## `src/main.cs`
 
-- `main.Main(string[] args)`: Console entry point that creates an `ImapEngine`, prints inbox/sent information, and exports the latest inbox and sent messages.
+- `Program.Main(string[] args)`: Console entry point that creates the IMAP engine and database client once, continuously polls inbox and sent folders, processes unseen messages, logs caught exceptions, and keeps running.
+- `Program.ComputeHash(string text)`: Returns the SHA-256 hash of `text` as an uppercase hexadecimal string.
+- `Program.InboxEMails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes inbox UIDs from newest to oldest until a known hash is found, then inserts unseen inbox messages in chronological order.
+- `Program.SentEmails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes sent-message UIDs from newest to oldest until a known hash is found, exports each unseen sent message as `.eml`, and stores the saved file path with the hash.
+
+## `src/DB/IDBClient.cs`
+
+- `IDBClient.Connection`: Open PostgreSQL connection used by the adapter.
+- `IDBClient.SetNewInboxMessage(string hash, string content)`: Persists a new inbox record.
+- `IDBClient.CheckHashInbox(string hash)`: Returns `true` when an inbox record with the given hash already exists.
+- `IDBClient.SetNewSendMessage(string hash, string path)`: Persists a new sent record.
+- `IDBClient.CheckHashSend(string hash)`: Returns `true` when a sent record with the given hash already exists.
+
+## `src/DB/DBClientAdapter.cs`
+
+- `DBClientAdapter.DBClientAdapter()`: Loads `.env` from the repository root when present, builds an `NpgsqlConnection` for `localhost`, opens the database connection immediately, and keeps it available through `Connection`.
+- `DBClientAdapter.SetNewInboxMessage(string hash, string content)`: Inserts `hash` and `content` into `e_mails_inbox`.
+- `DBClientAdapter.CheckHashInbox(string hash)`: Executes `SELECT EXISTS` against `e_mails_inbox`.
+- `DBClientAdapter.SetNewSendMessage(string hash, string path)`: Inserts `hash` and `path` into `e_mails_send`.
+- `DBClientAdapter.CheckHashSend(string hash)`: Executes `SELECT EXISTS` against `e_mails_send`.
+- `DBClientAdapter.Dispose()`: Disposes the open PostgreSQL connection.
 
 ## `src/Imap/ConfigLoader.cs`
 
@@ -27,14 +47,30 @@ This document describes the current behavior of all implemented methods in the p
 
 - `ImapEngine.ImapEngine()`: Creates engine defaults (`ImapService`, JSON config file, account key `bewerbung`).
 - `ImapEngine.ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey)`: Creates an engine with custom dependencies.
-- `ImapEngine.GetSendCount()`: Returns the message count from the sent folder.
-- `ImapEngine.GetInboxCount()`: Returns the message count from the inbox.
-- `ImapEngine.GetLastInboxMessage()`: Returns the latest inbox message as `MessageDto`; returns `UniqueId.Invalid` DTO when empty.
-- `ImapEngine.GetLastSentMail()`: Returns the latest sent message as `MessageDto`; returns `UniqueId.Invalid` DTO when empty.
+- `ImapEngine.CreateClient()`: Resolves the configured account and creates a connected, authenticated IMAP client through the configured factory.
+- `ImapEngine.ClientDisconnect(IImapClient client)`: Disconnects the IMAP client with `quit=true` and disposes it.
+- `ImapEngine.GetLastInboxMessage()`: Returns the latest inbox message as a non-null `MessageDto`; returns a `UniqueId.Invalid` DTO when the inbox is empty.
+- `ImapEngine.GetLastSentMail()`: Returns the latest sent message as a non-null `MessageDto`; returns a `UniqueId.Invalid` DTO when the sent folder is empty.
 - `ImapEngine.GetAllUIDS(IImapFolder folder)`: Returns all UIDs found by `SearchQuery.All`.
+- `ImapEngine.GetAllUIDInbox()`: Opens the inbox in read-only mode, returns all inbox UIDs in server order, and disconnects afterwards.
+- `ImapEngine.GetAllUIDSent()`: Opens the resolved sent folder in read-only mode, returns all sent-folder UIDs in server order, and disconnects afterwards.
 - `ImapEngine.GetLastUID(IImapFolder fold)`: Returns the last UID in folder search results, or `null` when empty.
-- `ImapEngine.SaveInboxMail(UniqueId uid)`: Exports an inbox message to `<savePath>/<uid>.eml`.
-- `ImapEngine.SaveSentMail(UniqueId uid)`: Exports a sent message to `<savePath>/<uid>.eml`.
+- `ImapEngine.GetInbox(IImapClient client)`: Opens the inbox in read-only mode and returns it.
+- `ImapEngine.GetSent(IImapClient client)`: Locates the `Gesendete Elemente` folder below the personal root by name or matching full-name suffix, opens it in read-only mode, and throws when no matching sent folder exists.
+- `ImapEngine.SaveInboxMail(UniqueId uid)`: Exports an inbox message to `<savePath>/<uid>.eml` and returns the written file path.
+- `ImapEngine.SaveSentMail(UniqueId uid)`: Exports a sent message to `<savePath>/<uid>.eml` and returns the written file path.
+- `ImapEngine.UseClient<T>(Func<IImapClient, T> action)`: Executes `action` with a newly created IMAP client and guarantees disconnect/dispose in a `finally` block.
+- `ImapEngine.GetLatestMessage(IImapFolder folder)`: Loads the newest message from `folder` and returns it as `MessageDto`; returns an empty DTO when the folder has no messages.
+- `ImapEngine.CreateMessageDto(UniqueId uid, MimeMessage message)`: Maps a MimeKit message into a lightweight DTO using subject and HTML or text body.
+- `ImapEngine.SaveMail(IImapFolder folder, UniqueId uid)`: Writes the specified message to `<savePath>/<uid>.eml` and returns the full file path.
+- `ImapEngine.GetSaveDirectory()`: Resolves, normalizes, and creates the configured save directory, then returns the absolute path.
+- `ImapEngine.GetInboxMessage(UniqueId id)`: Opens the inbox, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
+- `ImapEngine.GetSentMessage(UniqueId id)`: Opens the resolved sent folder, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
+
+## Database Schema
+
+- `DB/migrations/V1__init.sql`: Creates `e_mails_inbox` with `id`, `hash`, `content`, `operated`, and `deleted`.
+- `DB/migrations/V1__init.sql`: Creates `e_mails_send` with `id`, `hash`, `path`, `operated`, and `deleted`.
 
 ## `src/Imap/MailKitImapClientAdapter.cs`
 
