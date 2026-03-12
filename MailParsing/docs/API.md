@@ -4,8 +4,10 @@ This document describes the current behavior of all implemented methods in the p
 
 ## `src/main.cs`
 
-- `Program.Main(string[] args)`: Console entry point that creates the IMAP engine and database client, loads the latest inbox and sent messages, computes SHA-256 hashes from the message bodies, stores inbox content only when the inbox hash is new, and exports/stores the latest sent message only when the sent hash is new.
+- `Program.Main(string[] args)`: Console entry point that creates the IMAP engine and database client once, continuously polls inbox and sent folders, processes unseen messages, logs caught exceptions, and keeps running.
 - `Program.ComputeHash(string text)`: Returns the SHA-256 hash of `text` as an uppercase hexadecimal string.
+- `Program.InboxEMails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes inbox UIDs from newest to oldest until a known hash is found, then inserts unseen inbox messages in chronological order.
+- `Program.SentEmails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes sent-message UIDs from newest to oldest until a known hash is found, exports each unseen sent message as `.eml`, and stores the saved file path with the hash.
 
 ## `src/DB/IDBClient.cs`
 
@@ -50,15 +52,20 @@ This document describes the current behavior of all implemented methods in the p
 - `ImapEngine.GetLastInboxMessage()`: Returns the latest inbox message as a non-null `MessageDto`; returns a `UniqueId.Invalid` DTO when the inbox is empty.
 - `ImapEngine.GetLastSentMail()`: Returns the latest sent message as a non-null `MessageDto`; returns a `UniqueId.Invalid` DTO when the sent folder is empty.
 - `ImapEngine.GetAllUIDS(IImapFolder folder)`: Returns all UIDs found by `SearchQuery.All`.
+- `ImapEngine.GetAllUIDInbox()`: Opens the inbox in read-only mode, returns all inbox UIDs in server order, and disconnects afterwards.
+- `ImapEngine.GetAllUIDSent()`: Opens the resolved sent folder in read-only mode, returns all sent-folder UIDs in server order, and disconnects afterwards.
 - `ImapEngine.GetLastUID(IImapFolder fold)`: Returns the last UID in folder search results, or `null` when empty.
 - `ImapEngine.GetInbox(IImapClient client)`: Opens the inbox in read-only mode and returns it.
-- `ImapEngine.GetSent(IImapClient client)`: Locates the `Gesendete Elemente` folder below the personal root, opens it in read-only mode, and throws when no matching sent folder exists.
+- `ImapEngine.GetSent(IImapClient client)`: Locates the `Gesendete Elemente` folder below the personal root by name or matching full-name suffix, opens it in read-only mode, and throws when no matching sent folder exists.
+- `ImapEngine.SaveInboxMail(UniqueId uid)`: Exports an inbox message to `<savePath>/<uid>.eml` and returns the written file path.
 - `ImapEngine.SaveSentMail(UniqueId uid)`: Exports a sent message to `<savePath>/<uid>.eml` and returns the written file path.
 - `ImapEngine.UseClient<T>(Func<IImapClient, T> action)`: Executes `action` with a newly created IMAP client and guarantees disconnect/dispose in a `finally` block.
 - `ImapEngine.GetLatestMessage(IImapFolder folder)`: Loads the newest message from `folder` and returns it as `MessageDto`; returns an empty DTO when the folder has no messages.
 - `ImapEngine.CreateMessageDto(UniqueId uid, MimeMessage message)`: Maps a MimeKit message into a lightweight DTO using subject and HTML or text body.
 - `ImapEngine.SaveMail(IImapFolder folder, UniqueId uid)`: Writes the specified message to `<savePath>/<uid>.eml` and returns the full file path.
 - `ImapEngine.GetSaveDirectory()`: Resolves, normalizes, and creates the configured save directory, then returns the absolute path.
+- `ImapEngine.GetInboxMessage(UniqueId id)`: Opens the inbox, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
+- `ImapEngine.GetSentMessage(UniqueId id)`: Opens the resolved sent folder, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
 
 ## Database Schema
 

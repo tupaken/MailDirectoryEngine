@@ -271,6 +271,70 @@ public class ImapEngineTests
     }
 
     /// <summary>
+    /// Verifies that inbox UID listing opens the inbox, returns the server order, and disconnects the client.
+    /// </summary>
+    [Fact]
+    public void GetAllUIDInbox_ReturnsInboxUids_AndDisconnects()
+    {
+        var uid1 = new UniqueId(41);
+        var uid2 = new UniqueId(42);
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 2,
+            searchResults: new[] { uid1, uid2 });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetAllUIDInbox();
+
+        Assert.Equal(new[] { uid1, uid2 }, result);
+        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that sent UID listing resolves the sent folder by full-name suffix and disconnects the client.
+    /// </summary>
+    [Fact]
+    public void GetAllUIDSent_ReturnsSentUids_FromFullNameSuffixMatch()
+    {
+        var uid1 = new UniqueId(51);
+        var uid2 = new UniqueId(52);
+
+        var sentFolder = new FakeImapFolder(
+            name: "Archive",
+            fullName: "Root.Gesendete Elemente",
+            count: 2,
+            searchResults: new[] { uid1, uid2 });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetAllUIDSent();
+
+        Assert.Equal(new[] { uid1, uid2 }, result);
+        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
     /// Verifies that folders without messages return no last UID.
     /// </summary>
     [Fact]
@@ -345,6 +409,74 @@ public class ImapEngineTests
 
         Assert.Equal(uid, result.Uid);
         Assert.Equal("plain text body", result.Context);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that a specific inbox message can be loaded while the client lifecycle is managed by the engine.
+    /// </summary>
+    [Fact]
+    public void GetInboxMessage_ReturnsRequestedMessage_AndDisconnects()
+    {
+        var uid = new UniqueId(61);
+        var message = CreateMessage("Inbox Subject", "Inbox text", "<p>Inbox html</p>");
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetInboxMessage(uid);
+
+        Assert.Equal(uid, result.Uid);
+        Assert.Equal("Inbox Subject", result.Titel);
+        Assert.Equal("<p>Inbox html</p>", result.Context);
+        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
+        Assert.True(client.DisconnectCalled);
+    }
+
+    /// <summary>
+    /// Verifies that a specific sent message can be loaded while the client lifecycle is managed by the engine.
+    /// </summary>
+    [Fact]
+    public void GetSentMessage_ReturnsRequestedMessage_AndDisconnects()
+    {
+        var uid = new UniqueId(71);
+        var message = CreateMessage("Sent Subject", "Sent text", "<p>Sent html</p>");
+
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 1,
+            messages: new Dictionary<UniqueId, MimeMessage> { [uid] = message });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung");
+
+        var result = engine.GetSentMessage(uid);
+
+        Assert.Equal(uid, result.Uid);
+        Assert.Equal("Sent Subject", result.Titel);
+        Assert.Equal("<p>Sent html</p>", result.Context);
+        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
         Assert.True(client.DisconnectCalled);
     }
 

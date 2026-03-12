@@ -151,6 +151,18 @@ namespace MailDirectoryEngine.src.Imap
         }
 
         /// <summary>
+        /// Exports the specified inbox message as an <c>.eml</c> file.
+        /// </summary>
+        /// <param name="uid">UID of the inbox message to export.</param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no save path is configured.
+        /// </exception>
+        public string SaveInboxMail(UniqueId uid)
+        {
+            return UseClient(client => SaveMail(GetInbox(client), uid));
+        }
+
+        /// <summary>
         /// Exports the specified sent message as an <c>.eml</c> file.
         /// </summary>
         /// <param name="uid">UID of the sent message to export.</param>
@@ -297,5 +309,6 @@ namespace MailDirectoryEngine.src.Imap
                 return CreateMessageDto(id, message);
             });
         }
+
     }
 }

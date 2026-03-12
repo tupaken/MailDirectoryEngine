@@ -18,12 +18,18 @@ namespace MailDirectoryEngine.src
             Console.WriteLine("Main:");
             var engine = new Imap.ImapEngine();
             var db = new DB.DBClientAdapter();
+            while(true){
+                try{
+                    var allUidInbox=engine.GetAllUIDInbox();
+                    InboxEMails(engine,db,allUidInbox);
 
-            var allUidInbox=engine.GetAllUIDInbox();
-            InboxEMails(engine,db,allUidInbox);
-
-            var allUidSent = engine.GetAllUIDSent();
-            SentEmails(engine,db,allUidSent);
+                    var allUidSent = engine.GetAllUIDSent();
+                    SentEmails(engine,db,allUidSent);
+                }catch(Exception ex)
+                {
+                 Console.WriteLine("Fehler: " + ex.Message);   
+                }
+            }
         }
 
         /// <summary>
@@ -83,7 +89,8 @@ namespace MailDirectoryEngine.src
             {   
                 var newIds =Ids.Take(Ids.Count - 1).ToList();
                 SentEmails(engine,db,newIds);
-                db.SetNewSendMessage(hashIM,SCont);
+                var savedPath = engine.SaveSentMail(SId);
+                db.SetNewSendMessage(hashIM, savedPath);
             }
         }
     }

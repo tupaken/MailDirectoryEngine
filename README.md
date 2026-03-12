@@ -5,6 +5,7 @@ A quick command reference for build, run, tests, and database migration.
 ## Documentation
 
 - API reference (English): `MailParsing/docs/API.md`
+- Runtime configuration overview: see `MailParsing/src/Imap/Imap_config.json`
 
 ## Prerequisites
 
@@ -49,6 +50,32 @@ dotnet run --project .\MailParsing\MailDirectoryEngine.csproj
 Notes:
 - The app reads IMAP configuration from `MailParsing/src/Imap/Imap_config.json`.
 - Database credentials are loaded from `.env`.
+- The current `Main` implementation runs in a continuous polling loop and retries after logged exceptions without exiting.
+
+## IMAP Configuration
+
+The engine expects a JSON file at `MailParsing/src/Imap/Imap_config.json` with named accounts plus a default export directory.
+
+Example:
+
+```json
+{
+  "accounts": {
+    "bewerbung": {
+      "host": "imap.example.test",
+      "port": 993,
+      "user": "user@example.test",
+      "password": "secret"
+    }
+  },
+  "savePath": "C:\\mail-export"
+}
+```
+
+Notes:
+- `accounts` is a dictionary. The current production default key is `bewerbung`.
+- `savePath` is used for `.eml` exports. If it is empty, `MAIL_SAVE_DIR` is used as a fallback.
+- Keep real credentials out of committed example files when possible.
 
 ## Database and Migrations
 
@@ -86,10 +113,12 @@ Important migration rule:
 
 The console entry point in `MailParsing/src/main.cs` currently does the following:
 
-1. Loads the latest inbox message and the latest sent message from IMAP.
-2. Computes a SHA-256 hash over each message body.
-3. Inserts a new inbox record only when the inbox hash does not already exist in `e_mails_inbox`.
-4. Exports the latest sent message and inserts a send record only when the sent hash does not already exist in `e_mails_send`.
+1. Creates one IMAP engine and one database adapter, then enters an endless processing loop.
+2. Loads all inbox UIDs and recursively walks from newest to oldest until an already known inbox hash is found.
+3. Inserts each unseen inbox message body into `e_mails_inbox` in chronological order.
+4. Loads all sent-message UIDs and recursively walks from newest to oldest until an already known sent hash is found.
+5. Exports each unseen sent message to `<savePath>/<uid>.eml` and stores the hash plus saved file path in `e_mails_send`.
+6. Logs exceptions to the console and immediately continues with the next loop iteration.
 
 ## Run tests
 
@@ -122,6 +151,8 @@ With detailed output and TRX log:
 ```powershell
 dotnet test -v normal --logger "trx;LogFileName=test-results.trx"
 ```
+
+If a local `MailDirectoryEngine.exe` instance is already running from the same build output, stop it before running tests so MSBuild can overwrite the binaries.
 
 ## Clean
 
