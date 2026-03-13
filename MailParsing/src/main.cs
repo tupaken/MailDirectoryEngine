@@ -16,7 +16,7 @@ namespace MailDirectoryEngine.src
         static void Main(string[] args)
         {
             Console.WriteLine("Main:");
-            var engine = new Imap.ImapEngine();
+            var engine = new Imap.ImapEngine("bewerbung");
             var db = new DB.DBClientAdapter();
             while(true){
                 try{

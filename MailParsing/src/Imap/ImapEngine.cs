@@ -17,11 +17,11 @@ namespace MailDirectoryEngine.src.Imap
         /// <summary>
         /// Initializes the engine with production defaults.
         /// </summary>
-        public ImapEngine()
+        public ImapEngine(string accountKey)
             : this(
                 new ImapService(),
                 new JsonImapConfigProvider(Path.Combine(AppContext.BaseDirectory, "src", "Imap", "Imap_config.json")),
-                "bewerbung")
+                accountKey)
         {
         }
 

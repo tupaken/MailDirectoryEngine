@@ -16,4 +16,11 @@
     <ProjectReference Include="..\\MailDirectoryEngine.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="artifacts\**\*.cs" />
+    <Content Remove="artifacts\**\*" />
+    <EmbeddedResource Remove="artifacts\**\*" />
+    <None Remove="artifacts\**\*" />
+  </ItemGroup>
+
 </Project>
