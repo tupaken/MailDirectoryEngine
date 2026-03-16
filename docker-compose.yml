@@ -32,3 +32,15 @@ services:
       - "8080:8080"
     depends_on:
       - postgres
+
+  ollama:
+      image: ollama/ollama:latest
+      container_name: ollama
+      ports:
+        - "11434:11434"
+      volumes:
+        - ollama-data:/root/.ollama
+      restart: unless-stopped
+
+volumes:
+  ollama-data:
