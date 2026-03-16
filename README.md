@@ -83,8 +83,8 @@ The repository uses PostgreSQL plus Flyway via `docker-compose.yml`.
 
 - PostgreSQL data is configured through `.env`.
 - SQL migration files live in `DB/migrations`.
-- `e_mails_inbox` stores inbox message hashes and message content.
-- `e_mails_send` stores sent message hashes and the `path` payload written by the application.
+- `e_mails_inbox` stores inbox message hashes, message content, and an `account` scope value.
+- `e_mails_send` stores sent message hashes, exported `path`, and an `account` scope value.
 
 Start the database:
 
@@ -113,11 +113,11 @@ Important migration rule:
 
 The console entry point in `MailParsing/src/main.cs` currently does the following:
 
-1. Creates one IMAP engine and one database adapter, then enters an endless processing loop.
-2. Loads all inbox UIDs and recursively walks from newest to oldest until an already known inbox hash is found.
-3. Inserts each unseen inbox message body into `e_mails_inbox` in chronological order.
-4. Loads all sent-message UIDs and recursively walks from newest to oldest until an already known sent hash is found.
-5. Exports each unseen sent message to `<savePath>/<uid>.eml` and stores the hash plus saved file path in `e_mails_send`.
+1. Creates one database adapter, creates an IMAP engine per configured user key, and then enters an endless processing loop.
+2. For each engine, loads all inbox UIDs and recursively walks from newest to oldest until an already known `(hash, account)` combination is found.
+3. Inserts each unseen inbox message body into `e_mails_inbox` in chronological order with the current account value.
+4. Loads all sent-message UIDs and recursively walks from newest to oldest until an already known `(hash, account)` combination is found.
+5. Exports each unseen sent message to `<savePath>/<uid>.eml` and stores the hash, path, and account in `e_mails_send`.
 6. Logs exceptions to the console and immediately continues with the next loop iteration.
 
 ## Run tests

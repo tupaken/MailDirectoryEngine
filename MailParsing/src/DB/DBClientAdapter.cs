@@ -49,6 +49,7 @@ namespace MailDirectoryEngine.src.DB
         /// </summary>
         /// <param name="hash">Deduplication hash of the inbox message.</param>
         /// <param name="content">Message content stored with the inbox record.</param>
+        /// <param name="account">Account scope identifier stored with the inbox record.</param>
         public void SetNewInboxMessage(string hash, string content,string account)
         {
             using var cmd = new NpgsqlCommand(
@@ -63,6 +64,7 @@ namespace MailDirectoryEngine.src.DB
         /// Checks whether the inbox table already contains the provided hash.
         /// </summary>
         /// <param name="hash">Deduplication hash to search for.</param>
+        /// <param name="account">Account scope identifier used for the lookup.</param>
         /// <returns><c>true</c> when the hash already exists; otherwise <c>false</c>.</returns>
         public bool  CheckHashInbox(string hash,string account)
         {
@@ -85,6 +87,7 @@ namespace MailDirectoryEngine.src.DB
         /// </summary>
         /// <param name="hash">Deduplication hash of the sent message.</param>
         /// <param name="path">Path value stored for the sent message record.</param>
+        /// <param name="account">Account scope identifier stored with the sent record.</param>
         public void SetNewSendMessage(string hash, string path, string account)
         {
             using var cmd = new NpgsqlCommand(
@@ -100,6 +103,7 @@ namespace MailDirectoryEngine.src.DB
         /// Checks whether the sent table already contains the provided hash.
         /// </summary>
         /// <param name="hash">Deduplication hash to search for.</param>
+        /// <param name="account">Account scope identifier used for the lookup.</param>
         /// <returns><c>true</c> when the hash already exists; otherwise <c>false</c>.</returns>
         public bool CheckHashSend(string hash,string account)
         {

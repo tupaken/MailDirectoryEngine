@@ -19,6 +19,8 @@ namespace MailDirectoryEngine.src.Imap
         /// <summary>
         /// Initializes the engine with production defaults.
         /// </summary>
+        /// <param name="accountKey">Account key resolved from configuration.</param>
+        /// <param name="Hash">Account hash value used by the persistence flow.</param>
         public ImapEngine(string accountKey, string Hash)
             : this(
                 new ImapService(),
@@ -33,6 +35,7 @@ namespace MailDirectoryEngine.src.Imap
         /// <param name="clientFactory">Factory used to create IMAP clients.</param>
         /// <param name="configProvider">Provider used to resolve account configuration.</param>
         /// <param name="accountKey">Account key resolved from configuration.</param>
+        /// <param name="Hash">Account hash value used by the persistence flow.</param>
         internal ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey,string Hash)
         {
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
@@ -313,6 +316,10 @@ namespace MailDirectoryEngine.src.Imap
             });
         }
 
+        /// <summary>
+        /// Returns the account hash used for account-scoped deduplication checks.
+        /// </summary>
+        /// <returns>Account hash value for the current engine instance.</returns>
         public string getAccountHash()
         {
             return _accountHash;
