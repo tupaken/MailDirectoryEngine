@@ -16,18 +16,25 @@ namespace MailDirectoryEngine.src
         static void Main(string[] args)
         {
             Console.WriteLine("Main:");
-            var engine = new Imap.ImapEngine("bewerbung");
+            List<String> users = ["bewerbung"];
+            var accounts = new List <ImapEngine>() ;
             var db = new DB.DBClientAdapter();
+            
+            foreach (var i in users){
+                var engine = new Imap.ImapEngine(i,ComputeHash(i));
+                accounts.Add(engine);
+            }
             while(true){
-                try{
-                    var allUidInbox=engine.GetAllUIDInbox();
-                    InboxEMails(engine,db,allUidInbox);
-
-                    var allUidSent = engine.GetAllUIDSent();
-                    SentEmails(engine,db,allUidSent);
-                }catch(Exception ex)
-                {
-                 Console.WriteLine("Fehler: " + ex.Message);   
+                foreach (var engine in accounts){
+                    try{
+                        var allUidInbox=engine.GetAllUIDInbox();
+                        InboxEMails(engine,db,allUidInbox);
+                        var allUidSent = engine.GetAllUIDSent();
+                        SentEmails(engine,db,allUidSent);
+                    }catch(Exception ex)
+                    {
+                    Console.WriteLine("Fehler: " + ex.Message);   
+                    }
                 }
             }
         }
@@ -61,11 +68,12 @@ namespace MailDirectoryEngine.src
             var IMId=Ids[^1];
             var IMCont=engine.GetInboxMessage(IMId).Context;
             var hashIM=ComputeHash(IMCont);
-            if (!db.CheckHashInbox(hashIM))
+            var hashUS = engine.getAccountHash();
+            if (!db.CheckHashInbox(hashIM,hashUS))
             {   
                 var newIds =Ids.Take(Ids.Count - 1).ToList();
                 InboxEMails(engine,db,newIds);
-                db.SetNewInboxMessage(hashIM,IMCont);
+                db.SetNewInboxMessage(hashIM,IMCont,hashUS);
             }
         }
 
@@ -85,12 +93,13 @@ namespace MailDirectoryEngine.src
             var SId=Ids[^1];
             var SCont=engine.GetSentMessage(SId).Context;
             var hashIM=ComputeHash(SCont);
-            if (!db.CheckHashSend(hashIM))
+            var hashUS=engine.getAccountHash();
+            if (!db.CheckHashSend(hashIM,hashUS))
             {   
                 var newIds =Ids.Take(Ids.Count - 1).ToList();
                 SentEmails(engine,db,newIds);
                 var savedPath = engine.SaveSentMail(SId);
-                db.SetNewSendMessage(hashIM, savedPath);
+                db.SetNewSendMessage(hashIM, savedPath,hashUS);
             }
         }
     }

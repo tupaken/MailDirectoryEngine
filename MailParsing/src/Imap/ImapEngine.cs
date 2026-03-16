@@ -14,14 +14,16 @@ namespace MailDirectoryEngine.src.Imap
         private readonly IImapConfigProvider _configProvider;
         private readonly string _accountKey;
 
+        private readonly string _accountHash;
+
         /// <summary>
         /// Initializes the engine with production defaults.
         /// </summary>
-        public ImapEngine(string accountKey)
+        public ImapEngine(string accountKey, string Hash)
             : this(
                 new ImapService(),
                 new JsonImapConfigProvider(Path.Combine(AppContext.BaseDirectory, "src", "Imap", "Imap_config.json")),
-                accountKey)
+                accountKey,Hash)
         {
         }
 
@@ -31,7 +33,7 @@ namespace MailDirectoryEngine.src.Imap
         /// <param name="clientFactory">Factory used to create IMAP clients.</param>
         /// <param name="configProvider">Provider used to resolve account configuration.</param>
         /// <param name="accountKey">Account key resolved from configuration.</param>
-        internal ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey)
+        internal ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey,string Hash)
         {
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
             _configProvider = configProvider ?? throw new ArgumentNullException(nameof(configProvider));
@@ -39,6 +41,7 @@ namespace MailDirectoryEngine.src.Imap
                 throw new ArgumentException("Account key is required.", nameof(accountKey));
 
             _accountKey = accountKey;
+            _accountHash = Hash;
         }
 
 
@@ -308,6 +311,11 @@ namespace MailDirectoryEngine.src.Imap
                 var message = sent.GetMessage(id);
                 return CreateMessageDto(id, message);
             });
+        }
+
+        public string getAccountHash()
+        {
+            return _accountHash;
         }
 
     }
