@@ -14,14 +14,18 @@ namespace MailDirectoryEngine.src.Imap
         private readonly IImapConfigProvider _configProvider;
         private readonly string _accountKey;
 
+        private readonly string _accountHash;
+
         /// <summary>
         /// Initializes the engine with production defaults.
         /// </summary>
-        public ImapEngine()
+        /// <param name="accountKey">Account key resolved from configuration.</param>
+        /// <param name="Hash">Account hash value used by the persistence flow.</param>
+        public ImapEngine(string accountKey, string Hash)
             : this(
                 new ImapService(),
                 new JsonImapConfigProvider(Path.Combine(AppContext.BaseDirectory, "src", "Imap", "Imap_config.json")),
-                "bewerbung")
+                accountKey,Hash)
         {
         }
 
@@ -31,7 +35,8 @@ namespace MailDirectoryEngine.src.Imap
         /// <param name="clientFactory">Factory used to create IMAP clients.</param>
         /// <param name="configProvider">Provider used to resolve account configuration.</param>
         /// <param name="accountKey">Account key resolved from configuration.</param>
-        internal ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey)
+        /// <param name="Hash">Account hash value used by the persistence flow.</param>
+        internal ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey,string Hash)
         {
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
             _configProvider = configProvider ?? throw new ArgumentNullException(nameof(configProvider));
@@ -39,6 +44,7 @@ namespace MailDirectoryEngine.src.Imap
                 throw new ArgumentException("Account key is required.", nameof(accountKey));
 
             _accountKey = accountKey;
+            _accountHash = Hash;
         }
 
 
@@ -308,6 +314,15 @@ namespace MailDirectoryEngine.src.Imap
                 var message = sent.GetMessage(id);
                 return CreateMessageDto(id, message);
             });
+        }
+
+        /// <summary>
+        /// Returns the account hash used for account-scoped deduplication checks.
+        /// </summary>
+        /// <returns>Account hash value for the current engine instance.</returns>
+        public string getAccountHash()
+        {
+            return _accountHash;
         }
 
     }

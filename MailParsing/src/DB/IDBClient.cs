@@ -18,27 +18,31 @@ namespace MailDirectoryEngine.src.DB
         /// </summary>
         /// <param name="hash">Deduplication hash of the inbox message.</param>
         /// <param name="content">Stored inbox message content.</param>
-        void SetNewInboxMessage(string hash, string content);
+        /// <param name="account">Account scope identifier for the message record.</param>
+        void SetNewInboxMessage(string hash, string content, string account);
 
         /// <summary>
         /// Checks whether an inbox message hash already exists.
         /// </summary>
         /// <param name="hash">Deduplication hash to search for.</param>
+        /// <param name="account">Account scope identifier used for the lookup.</param>
         /// <returns><c>true</c> when the hash already exists; otherwise <c>false</c>.</returns>
-        bool CheckHashInbox(string hash);
+        bool CheckHashInbox(string hash, string account);
 
         /// <summary>
         /// Inserts a new sent message record.
         /// </summary>
         /// <param name="hash">Deduplication hash of the sent message.</param>
         /// <param name="path">Persisted value stored in the sent message path column.</param>
-        void SetNewSendMessage(string hash, string path);
+        /// <param name="account">Account scope identifier for the message record.</param>
+        void SetNewSendMessage(string hash, string path, string account);
 
         /// <summary>
         /// Checks whether a sent message hash already exists.
         /// </summary>
         /// <param name="hash">Deduplication hash to search for.</param>
+        /// <param name="account">Account scope identifier used for the lookup.</param>
         /// <returns><c>true</c> when the hash already exists; otherwise <c>false</c>.</returns>
-        bool CheckHashSend(string hash);
+        bool CheckHashSend(string hash, string account);
     }
 }

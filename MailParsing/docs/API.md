@@ -4,26 +4,26 @@ This document describes the current behavior of all implemented methods in the p
 
 ## `src/main.cs`
 
-- `Program.Main(string[] args)`: Console entry point that creates the IMAP engine and database client once, continuously polls inbox and sent folders, processes unseen messages, logs caught exceptions, and keeps running.
+- `Program.Main(string[] args)`: Console entry point that creates one database client plus one IMAP engine per configured user key, continuously polls inbox and sent folders for each account, processes unseen messages, logs caught exceptions, and keeps running.
 - `Program.ComputeHash(string text)`: Returns the SHA-256 hash of `text` as an uppercase hexadecimal string.
-- `Program.InboxEMails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes inbox UIDs from newest to oldest until a known hash is found, then inserts unseen inbox messages in chronological order.
-- `Program.SentEmails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes sent-message UIDs from newest to oldest until a known hash is found, exports each unseen sent message as `.eml`, and stores the saved file path with the hash.
+- `Program.InboxEMails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes inbox UIDs from newest to oldest until a known `(hash, account)` combination is found, then inserts unseen inbox messages in chronological order.
+- `Program.SentEmails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes sent-message UIDs from newest to oldest until a known `(hash, account)` combination is found, exports each unseen sent message as `.eml`, and stores the saved file path with hash/account metadata.
 
 ## `src/DB/IDBClient.cs`
 
 - `IDBClient.Connection`: Open PostgreSQL connection used by the adapter.
-- `IDBClient.SetNewInboxMessage(string hash, string content)`: Persists a new inbox record.
-- `IDBClient.CheckHashInbox(string hash)`: Returns `true` when an inbox record with the given hash already exists.
-- `IDBClient.SetNewSendMessage(string hash, string path)`: Persists a new sent record.
-- `IDBClient.CheckHashSend(string hash)`: Returns `true` when a sent record with the given hash already exists.
+- `IDBClient.SetNewInboxMessage(string hash, string content, string account)`: Persists a new inbox record scoped to an account value.
+- `IDBClient.CheckHashInbox(string hash, string account)`: Returns `true` when an inbox record with the given hash and account already exists.
+- `IDBClient.SetNewSendMessage(string hash, string path, string account)`: Persists a new sent record scoped to an account value.
+- `IDBClient.CheckHashSend(string hash, string account)`: Returns `true` when a sent record with the given hash and account already exists.
 
 ## `src/DB/DBClientAdapter.cs`
 
 - `DBClientAdapter.DBClientAdapter()`: Loads `.env` from the repository root when present, builds an `NpgsqlConnection` for `localhost`, opens the database connection immediately, and keeps it available through `Connection`.
-- `DBClientAdapter.SetNewInboxMessage(string hash, string content)`: Inserts `hash` and `content` into `e_mails_inbox`.
-- `DBClientAdapter.CheckHashInbox(string hash)`: Executes `SELECT EXISTS` against `e_mails_inbox`.
-- `DBClientAdapter.SetNewSendMessage(string hash, string path)`: Inserts `hash` and `path` into `e_mails_send`.
-- `DBClientAdapter.CheckHashSend(string hash)`: Executes `SELECT EXISTS` against `e_mails_send`.
+- `DBClientAdapter.SetNewInboxMessage(string hash, string content, string account)`: Inserts `hash`, `content`, and `account` into `e_mails_inbox`.
+- `DBClientAdapter.CheckHashInbox(string hash, string account)`: Executes `SELECT EXISTS` against `e_mails_inbox` filtered by `hash` and `account`.
+- `DBClientAdapter.SetNewSendMessage(string hash, string path, string account)`: Inserts `hash`, `path`, and `account` into `e_mails_send`.
+- `DBClientAdapter.CheckHashSend(string hash, string account)`: Executes `SELECT EXISTS` against `e_mails_send` filtered by `hash` and `account`.
 - `DBClientAdapter.Dispose()`: Disposes the open PostgreSQL connection.
 
 ## `src/Imap/ConfigLoader.cs`
@@ -45,8 +45,8 @@ This document describes the current behavior of all implemented methods in the p
 
 ## `src/Imap/ImapEngine.cs`
 
-- `ImapEngine.ImapEngine()`: Creates engine defaults (`ImapService`, JSON config file, account key `bewerbung`).
-- `ImapEngine.ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey)`: Creates an engine with custom dependencies.
+- `ImapEngine.ImapEngine(string accountKey, string Hash)`: Creates an engine with production collaborators and stores account key plus account hash.
+- `ImapEngine.ImapEngine(IImapClientFactory clientFactory, IImapConfigProvider configProvider, string accountKey, string Hash)`: Creates an engine with custom dependencies plus account key/hash values.
 - `ImapEngine.CreateClient()`: Resolves the configured account and creates a connected, authenticated IMAP client through the configured factory.
 - `ImapEngine.ClientDisconnect(IImapClient client)`: Disconnects the IMAP client with `quit=true` and disposes it.
 - `ImapEngine.GetLastInboxMessage()`: Returns the latest inbox message as a non-null `MessageDto`; returns a `UniqueId.Invalid` DTO when the inbox is empty.
@@ -66,11 +66,13 @@ This document describes the current behavior of all implemented methods in the p
 - `ImapEngine.GetSaveDirectory()`: Resolves, normalizes, and creates the configured save directory, then returns the absolute path.
 - `ImapEngine.GetInboxMessage(UniqueId id)`: Opens the inbox, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
 - `ImapEngine.GetSentMessage(UniqueId id)`: Opens the resolved sent folder, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
+- `ImapEngine.getAccountHash()`: Returns the account hash value used by the current processing flow for account-scoped persistence checks.
 
 ## Database Schema
 
 - `DB/migrations/V1__init.sql`: Creates `e_mails_inbox` with `id`, `hash`, `content`, `operated`, and `deleted`.
 - `DB/migrations/V1__init.sql`: Creates `e_mails_send` with `id`, `hash`, `path`, `operated`, and `deleted`.
+- `DB/migrations/V2.sql`: Adds `account` column to both tables, backfills existing rows with `bewerbung`, and marks the new column as `NOT NULL`.
 
 ## `src/Imap/MailKitImapClientAdapter.cs`
 
