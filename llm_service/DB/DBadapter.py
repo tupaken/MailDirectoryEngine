@@ -3,7 +3,6 @@ from sqlalchemy import create_engine,select,MetaData,Table
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from .messageModel import Message
-from htmlCleaner import html_to_text
 
 class DB_adapter():
     def __init__(self):
@@ -25,5 +24,3 @@ class DB_adapter():
             rows=session.execute(stmt).mappings().all()
             return [Message(id=row["id"], content=row["content"]) for row in rows]
     
-for msg in DB_adapter().get_new_messages_inbox():
-    print(html_to_text(msg.content))
