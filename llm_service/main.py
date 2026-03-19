@@ -1,12 +1,14 @@
 from .DB.DBadapter import DB_adapter
-from .htmlCleaner import html_to_text
+from .HTMLClean.htmlCleaner import html_to_text
+from .LLM.testConnection import test_connection
 
 def main():
     db=DB_adapter()
     messages=db.get_new_messages_inbox()
-    for message in messages:
-        text=html_to_text(message.content)
-        print (text+"\n")
+    if len(messages)>0:
+        for message in messages:
+            text=html_to_text(message.content)
+            print (test_connection(text)+"\n")
 
 if __name__ == "__main__":
     main()
