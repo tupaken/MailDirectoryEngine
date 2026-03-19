@@ -1,7 +1,10 @@
 from ollama import Client
 
-def test_connection(mail:str):
-    client=Client(host="http://localhost:11434")
+
+def test_connection(mail: str) -> str:
+    """Send one mail text to the local Ollama model and return the raw response text."""
+
+    client = Client(host="http://localhost:11434")
 
     response = client.generate(
         model="llama3.2",

@@ -1,6 +1,11 @@
 from dataclasses import dataclass
+from typing import Optional
 
-@dataclass()
-class Message():
+
+@dataclass
+class Message:
+    """Lightweight message container used by the Python service."""
+
     id: int
-    content: str
+    content: Optional[str] = None
+    path: Optional[str] = None

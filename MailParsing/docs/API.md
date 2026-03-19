@@ -33,7 +33,7 @@ This document describes the current behavior of all implemented methods in the p
 ## `src/Imap/JsonImapConfigProvider.cs`
 
 - `JsonImapConfigProvider.JsonImapConfigProvider(string path)`: Creates a config provider for a JSON file path.
-- `JsonImapConfigProvider.GetConfig(string key)`: Returns account settings for `key` from the JSON file.
+- `JsonImapConfigProvider.GetConfig(string key)`: Returns account settings for `key` from the JSON file and throws `InvalidOperationException` when the `accounts` section is missing or `null`.
 - `JsonImapConfigProvider.GetSavePath()`: Resolves save path from JSON `SavePath` or `MAIL_SAVE_DIR` environment variable and returns an absolute path.
 
 ## `src/Imap/ImapService.cs`

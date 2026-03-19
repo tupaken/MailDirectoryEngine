@@ -6,6 +6,7 @@ A quick command reference for build, run, tests, and database migration.
 
 - API reference (English): `MailParsing/docs/API.md`
 - Runtime configuration overview: see `MailParsing/src/Imap/Imap_config.json`
+- Python worker documentation: `llm_service/README.md`
 
 ## Prerequisites
 

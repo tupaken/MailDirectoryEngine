@@ -7,6 +7,9 @@ using MailKit;
 
 namespace MailDirectoryEngine.src
 {
+    /// <summary>
+    /// Application entry point and polling workflow for inbox and sent message processing.
+    /// </summary>
     internal class Program
     {
         /// <summary>
