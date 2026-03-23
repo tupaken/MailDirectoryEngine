@@ -1,4 +1,6 @@
-﻿import unittest
+"""Unit tests for the llm_service main processing entry point."""
+
+import unittest
 from unittest.mock import Mock, call, patch
 
 from llm_service.DB.messageModel import Message
@@ -6,6 +8,8 @@ from llm_service.main import main
 
 
 class MainTests(unittest.TestCase):
+    """Behavioral tests for ``main()`` orchestration."""
+
     @patch("builtins.print")
     @patch("llm_service.main.test_connection")
     @patch("llm_service.main.html_to_text")
@@ -17,6 +21,7 @@ class MainTests(unittest.TestCase):
         test_connection_mock,
         print_mock,
     ):
+        """Each inbox message should be cleaned, classified, and printed."""
         fake_db = Mock()
         fake_db.get_new_messages_inbox.return_value = [
             Message(id=1, content="<p>One</p>"),
@@ -43,6 +48,7 @@ class MainTests(unittest.TestCase):
         test_connection_mock,
         print_mock,
     ):
+        """No processing should happen when no inbox rows are returned."""
         fake_db = Mock()
         fake_db.get_new_messages_inbox.return_value = []
         db_adapter_cls.return_value = fake_db

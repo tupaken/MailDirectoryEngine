@@ -1,8 +1,10 @@
+"""PostgreSQL adapter used by llm_service to read and update message rows."""
+
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlalchemy import MetaData, Table, create_engine, select
+from sqlalchemy import MetaData, Table, create_engine, select, update
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -11,7 +13,18 @@ from .messageModel import Message
 
 
 class DB_adapter:
-    def __init__(self):
+    """Database access wrapper for inbox and sent mail tables."""
+
+    def __init__(self, engine=None):
+        """Initialize engine and reflect required tables.
+
+        Args:
+            engine: Optional preconfigured SQLAlchemy engine for testing or reuse.
+
+        Raises:
+            RuntimeError: If required environment variables are missing or database
+                connection/schema reflection fails.
+        """
         env_path = Path(__file__).resolve().parents[2] / ".env"
         load_dotenv(dotenv_path=env_path if env_path.exists() else None)
 
@@ -40,7 +53,7 @@ class DB_adapter:
             port=int(port),
             database=dbname,
         )
-        self.db = create_engine(
+        self.db = engine or create_engine(
             url,
             pool_pre_ping=True,
             connect_args={"connect_timeout": 5},
@@ -62,18 +75,40 @@ class DB_adapter:
             ) from exc
 
     def get_new_messages_inbox(self):
+        """Return unprocessed inbox rows as Message objects."""
         with Session(self.db) as session:
             column = self.inbox.c
             stmt = select(column.id, column.content).where(column.operated.is_(False))
             rows = session.execute(stmt).mappings().all()
             return [Message(id=row["id"], content=row["content"]) for row in rows]
-    
-    def get_new_messages_sent(self):
-        with Session(self.db) as session:
-            column=self.sent.c
-            stmt=select(column.id,column.path).where(column.operated.is_(False))
-            rows = session.execute(stmt).mappings().all()
-            return[Message(id=row["id"],path=row["path"]) for row in rows]
 
-    def mark_operated(self):
-        pass
+    def get_new_messages_sent(self):
+        """Return unprocessed sent rows as Message objects."""
+        with Session(self.db) as session:
+            column = self.sent.c
+            stmt = select(column.id, column.path).where(column.operated.is_(False))
+            rows = session.execute(stmt).mappings().all()
+            return [Message(id=row["id"], path=row["path"]) for row in rows]
+
+    def mark_operated(self, messageDirection: str, id: str):
+        """Mark an inbox or sent message row as operated.
+
+        Args:
+            messageDirection: Either ``Inbox`` or ``Sent``.
+            id: Primary key value of the row to update.
+
+        Raises:
+            ValueError: If ``messageDirection`` is unknown.
+        """
+        if messageDirection == "Inbox":
+            table = self.inbox
+        elif messageDirection == "Sent":
+            table = self.sent
+        else:
+            raise ValueError(f"Unknown messageDirection: {messageDirection}")
+
+        stmt = update(table).where(table.c.id.is_(id)).values(operated=True)
+
+        with Session(self.db) as sessioin:
+            sessioin.execute(stmt)
+            sessioin.commit()

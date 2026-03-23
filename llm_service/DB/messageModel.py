@@ -1,3 +1,5 @@
+"""Data model objects shared across llm_service modules."""
+
 from dataclasses import dataclass
 from typing import Optional
 

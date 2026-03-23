@@ -1,3 +1,5 @@
+"""Ollama prompt wrapper used to classify inbox text payloads."""
+
 from ollama import Client
 
 

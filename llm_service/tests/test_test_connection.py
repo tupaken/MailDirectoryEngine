@@ -1,3 +1,5 @@
+"""Unit tests for the Ollama wrapper helper."""
+
 import unittest
 from unittest.mock import Mock, patch
 
@@ -5,8 +7,11 @@ from llm_service.LLM.testConnection import test_connection
 
 
 class TestConnectionTests(unittest.TestCase):
+    """Ensure the wrapper calls Ollama with expected parameters."""
+
     @patch("llm_service.LLM.testConnection.Client")
     def test_test_connection_calls_ollama_and_returns_response(self, client_cls):
+        """The helper should return the ``response`` field from ``generate``."""
         fake_client = Mock()
         fake_client.generate.return_value = {"response": "True"}
         client_cls.return_value = fake_client

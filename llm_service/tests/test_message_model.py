@@ -1,10 +1,15 @@
+"""Unit tests for the Message dataclass."""
+
 import unittest
 
 from llm_service.DB.messageModel import Message
 
 
 class MessageModelTests(unittest.TestCase):
+    """Validation tests for Message field combinations."""
+
     def test_message_allows_content_only(self):
+        """Message should accept only textual content."""
         message = Message(id=1, content="hello")
 
         self.assertEqual(1, message.id)
@@ -12,6 +17,7 @@ class MessageModelTests(unittest.TestCase):
         self.assertIsNone(message.path)
 
     def test_message_allows_path_only(self):
+        """Message should accept only a file path reference."""
         message = Message(id=2, path="C:/tmp/2.eml")
 
         self.assertEqual(2, message.id)

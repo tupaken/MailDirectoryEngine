@@ -1,3 +1,5 @@
+"""Application entry point for the Python inbox post-processing worker."""
+
 from .DB.DBadapter import DB_adapter
 from .HTMLClean.htmlCleaner import html_to_text
 from .LLM.testConnection import test_connection

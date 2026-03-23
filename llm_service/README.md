@@ -47,5 +47,20 @@ python -m llm_service.main
 Unit tests are in `llm_service/tests` and do not require a running database or Ollama server.
 
 ```powershell
-python -m unittest discover -s llm_service/tests -v
+cd C:\Users\Praktikant\Desktop\MailDirectoryEngine
+uv --project llm_service run pytest llm_service/tests -q
 ```
+
+Run only `DB_adapter` tests:
+
+```powershell
+cd C:\Users\Praktikant\Desktop\MailDirectoryEngine
+uv --project llm_service run pytest llm_service/tests/test_DB_adapter.py -q
+```
+
+`test_DB_adapter.py` covers:
+- environment validation (`POSTGRES_*` variables)
+- engine creation and injected-engine behavior
+- connection and table-reflection error wrapping
+- inbox/sent message fetch mapping to `Message`
+- `mark_operated` for `Inbox`, `Sent`, and invalid direction

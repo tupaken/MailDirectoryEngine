@@ -1,3 +1,5 @@
+"""HTML sanitizing helpers for converting emails into plain text."""
+
 from bs4 import BeautifulSoup
 
 
