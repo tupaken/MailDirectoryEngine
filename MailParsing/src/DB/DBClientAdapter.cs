@@ -2,9 +2,6 @@ using System;
 using System.IO;
 using Npgsql;
 using DotNetEnv;
-using MailKit;
-using Microsoft.VisualBasic;
-using System.Runtime.InteropServices;
 
 namespace MailDirectoryEngine.src.DB
 {

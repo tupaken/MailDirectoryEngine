@@ -35,7 +35,12 @@ namespace MailDirectoryEngine.src.Imap
                 throw new ArgumentException("Account key is required.", nameof(key));
 
             var settings = ConfigLoader.Load(_path);
-            if (!settings.Accounts.TryGetValue(key, out var config))
+            var accounts = settings.Accounts
+                ?? throw new InvalidOperationException("IMAP settings are missing the 'accounts' section.");
+            if (accounts.Count == 0)
+                throw new InvalidOperationException("IMAP settings do not contain any configured accounts.");
+
+            if (!accounts.TryGetValue(key, out var config))
                 throw new ArgumentException($"Unknown account key: '{key}'", nameof(key));
 
             return config;

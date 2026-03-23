@@ -163,6 +163,60 @@ public class ConfigProviderTests
     }
 
     /// <summary>
+    /// Verifies that a missing accounts section is reported as invalid configuration.
+    /// </summary>
+    [Fact]
+    public void JsonImapConfigProvider_GetConfig_ThrowsWhenAccountsSectionIsMissing()
+    {
+        var json = """
+        {
+          "savePath": "C:\\mail-export"
+        }
+        """;
+
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(path, json);
+            var provider = new JsonImapConfigProvider(path);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => provider.GetConfig("test"));
+            Assert.Contains("accounts", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that an explicit null accounts section is reported as invalid configuration.
+    /// </summary>
+    [Fact]
+    public void JsonImapConfigProvider_GetConfig_ThrowsWhenAccountsSectionIsNull()
+    {
+        var json = """
+        {
+          "accounts": null
+        }
+        """;
+
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(path, json);
+            var provider = new JsonImapConfigProvider(path);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => provider.GetConfig("test"));
+            Assert.Contains("accounts", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// Verifies that invalid JSON content is surfaced as a deserialization error.
     /// </summary>
     [Fact]

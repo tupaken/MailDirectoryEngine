@@ -346,6 +346,80 @@ public class ImapEngineTests
     }
 
     /// <summary>
+    /// Verifies that the inbox folder is opened in read-only mode and returned unchanged.
+    /// </summary>
+    [Fact]
+    public void GetInbox_ReturnsOpenedInboxFolder()
+    {
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 3);
+
+        var root = new FakeImapFolder("Root", "Root", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung",
+            "ACCOUNT_HASH");
+
+        var result = engine.GetInbox(client);
+
+        Assert.Same(inbox, result);
+        Assert.Equal(FolderAccess.ReadOnly, inbox.LastOpenAccess);
+    }
+
+    /// <summary>
+    /// Verifies that the sent folder can be resolved by exact folder name and opened in read-only mode.
+    /// </summary>
+    [Fact]
+    public void GetSent_ReturnsOpenedFolder_WhenNameMatchesExactly()
+    {
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Other",
+            count: 1);
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var inbox = new FakeImapFolder("Inbox", "Inbox", 0);
+        var client = new FakeImapClient('/', root, inbox);
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(client),
+            new FakeConfigProvider(),
+            "bewerbung",
+            "ACCOUNT_HASH");
+
+        var result = engine.GetSent(client);
+
+        Assert.Same(sentFolder, result);
+        Assert.Equal(FolderAccess.ReadOnly, sentFolder.LastOpenAccess);
+    }
+
+    /// <summary>
+    /// Verifies that the engine exposes the constructor-supplied account hash unchanged.
+    /// </summary>
+    [Fact]
+    public void GetAccountHash_ReturnsConfiguredHash()
+    {
+        var expectedHash = "ACCOUNT_HASH_123";
+        var engine = new ImapEngine(
+            new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), new FakeImapFolder("Inbox", "Inbox", 0))),
+            new FakeConfigProvider(),
+            "bewerbung",
+            expectedHash);
+
+        var result = engine.getAccountHash();
+
+        Assert.Equal(expectedHash, result);
+    }
+
+    /// <summary>
     /// Verifies that folders without messages return no last UID.
     /// </summary>
     [Fact]

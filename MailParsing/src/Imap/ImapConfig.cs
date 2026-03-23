@@ -1,7 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
 namespace MailDirectoryEngine.src.Imap
 {
     /// <summary>
@@ -28,7 +24,7 @@ namespace MailDirectoryEngine.src.Imap
         /// Gets or sets the account password.
         /// </summary>
         public string Password { get; set; } = "";
-        
+
         /// <summary>
         /// Gets or sets the directory path used to persist exported e-mails.
         /// </summary>
