@@ -70,6 +70,22 @@ namespace MailDirectoryEngine.src.Imap
             client.Dispose();
         }
 
+        /// <summary>
+        /// Executes multiple IMAP operations within a single connected client session.
+        /// </summary>
+        /// <param name="action">Action executed against one connected IMAP client.</param>
+        public void WithClient(Action<IImapClient> action)
+        {
+            if (action == null)
+                throw new ArgumentNullException(nameof(action));
+
+            UseClient(client =>
+            {
+                action(client);
+                return 0;
+            });
+        }
+
 
         /// <summary>
         /// Retrieves the newest message from the inbox as a lightweight DTO.
@@ -165,7 +181,7 @@ namespace MailDirectoryEngine.src.Imap
         /// </exception>
         public string SaveInboxMail(UniqueId uid)
         {
-            return UseClient(client => SaveMail(GetInbox(client), uid));
+            return UseClient(client => SaveMessageToDisk(GetInbox(client), uid));
         }
 
         /// <summary>
@@ -177,7 +193,36 @@ namespace MailDirectoryEngine.src.Imap
         /// </exception>
         public string SaveSentMail(UniqueId uid)
         {
-            return UseClient(client => SaveMail(GetSent(client), uid));
+            return UseClient(client => SaveMessageToDisk(GetSent(client), uid));
+        }
+
+        /// <summary>
+        /// Loads a specific message from an already opened folder.
+        /// </summary>
+        /// <param name="folder">Opened folder containing the message.</param>
+        /// <param name="id">UID of the message to load.</param>
+        /// <returns>Loaded message as a DTO.</returns>
+        public MessageDto GetMessage(IImapFolder folder, UniqueId id)
+        {
+            if (folder == null)
+                throw new ArgumentNullException(nameof(folder));
+
+            var message = folder.GetMessage(id);
+            return CreateMessageDto(id, message);
+        }
+
+        /// <summary>
+        /// Saves a message from an already opened folder as an <c>.eml</c> file.
+        /// </summary>
+        /// <param name="folder">Opened folder containing the message.</param>
+        /// <param name="uid">UID of the message to save.</param>
+        /// <returns>Full path to the written <c>.eml</c> file.</returns>
+        public string SaveMessage(IImapFolder folder, UniqueId uid)
+        {
+            if (folder == null)
+                throw new ArgumentNullException(nameof(folder));
+
+            return SaveMessageToDisk(folder, uid);
         }
 
         /// <summary>
@@ -239,10 +284,11 @@ namespace MailDirectoryEngine.src.Imap
         /// <param name="folder">Folder containing the message.</param>
         /// <param name="uid">Unique identifier of the message to export.</param>
         /// <returns>Full path to the written <c>.eml</c> file.</returns>
-        private string SaveMail(IImapFolder folder, UniqueId uid)
+        private string SaveMessageToDisk(IImapFolder folder, UniqueId uid)
         {
             var message = folder.GetMessage(uid);
-            var filePath = Path.Combine(GetSaveDirectory(), $"{uid.Id}.eml");
+            var generatedId = Guid.NewGuid().ToString("N")[..6]; // kurzer Zusatz
+            var filePath = Path.Combine(GetSaveDirectory(), $"{uid.Id}_{generatedId}.eml");
 
             using var fileStream = File.Create(filePath);
             message.WriteTo(fileStream);
