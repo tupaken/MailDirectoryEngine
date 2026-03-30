@@ -1,7 +1,7 @@
 [project]
 name = "llm-service"
 version = "0.1.0"
-description = "Inbox post-processing worker (HTML cleaning + local Ollama classification)"
+description = "Inbox post-processing worker (HTML cleaning + local LLM classification)"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

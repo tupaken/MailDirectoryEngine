@@ -30,10 +30,16 @@ namespace MailDirectoryEngine.src
             while(true){
                 foreach (var engine in accounts){
                     try{
-                        var allUidInbox=engine.GetAllUIDInbox();
-                        InboxEMails(engine,db,allUidInbox);
-                        var allUidSent = engine.GetAllUIDSent();
-                        SentEmails(engine,db,allUidSent);
+                        engine.WithClient(client =>
+                        {
+                            var inbox = engine.GetInbox(client);
+                            var allUidInbox = engine.GetAllUIDS(inbox);
+                            InboxEMails(engine, db, inbox, allUidInbox);
+
+                            var sent = engine.GetSent(client);
+                            var allUidSent = engine.GetAllUIDS(sent);
+                            SentEmails(engine, db, sent, allUidSent);
+                        });
                     }catch(Exception ex)
                     {
                     Console.WriteLine("Fehler: " + ex.Message);   
@@ -60,23 +66,36 @@ namespace MailDirectoryEngine.src
         /// </summary>
         /// <param name="engine">IMAP engine used to load inbox messages.</param>
         /// <param name="db">Database client used for deduplication and persistence.</param>
+        /// <param name="inbox">Opened inbox folder used for message reads.</param>
         /// <param name="Ids">Inbox UIDs in server order.</param>
-        public static void InboxEMails(ImapEngine engine, DBClientAdapter db,IList<UniqueId> Ids)
+        public static void InboxEMails(ImapEngine engine, DBClientAdapter db, IImapFolder inbox, IList<UniqueId> Ids)
         {
             if (Ids.Count == 0)
             {
                 return;
             }
 
-            var IMId=Ids[^1];
-            var IMCont=engine.GetInboxMessage(IMId).Context;
-            var hashIM=ComputeHash(IMCont);
             var hashUS = engine.getAccountHash();
-            if (!db.CheckHashInbox(hashIM,hashUS))
-            {   
-                var newIds =Ids.Take(Ids.Count - 1).ToList();
-                InboxEMails(engine,db,newIds);
-                db.SetNewInboxMessage(hashIM,IMCont,hashUS);
+            var pendingMessages = new List<(string Hash, string Content)>();
+
+            for (int i = Ids.Count - 1; i >= 0; i--)
+            {
+                var uid = Ids[i];
+                var content = engine.GetMessage(inbox, uid).Context;
+                var hash = ComputeHash(content);
+
+                if (db.CheckHashInbox(hash, hashUS))
+                {
+                    break;
+                }
+
+                pendingMessages.Add((hash, content));
+            }
+
+            for (int i = pendingMessages.Count - 1; i >= 0; i--)
+            {
+                var pending = pendingMessages[i];
+                db.SetNewInboxMessage(pending.Hash, pending.Content, hashUS);
             }
         }
 
@@ -85,24 +104,37 @@ namespace MailDirectoryEngine.src
         /// </summary>
         /// <param name="engine">IMAP engine used to load sent messages.</param>
         /// <param name="db">Database client used for deduplication and persistence.</param>
+        /// <param name="sent">Opened sent folder used for message reads and exports.</param>
         /// <param name="Ids">Sent message UIDs in server order.</param>
-        public static void SentEmails(ImapEngine engine, DBClientAdapter db,IList<UniqueId> Ids)
+        public static void SentEmails(ImapEngine engine, DBClientAdapter db, IImapFolder sent, IList<UniqueId> Ids)
         {
             if (Ids.Count == 0)
             {
                 return;
             }
 
-            var SId=Ids[^1];
-            var SCont=engine.GetSentMessage(SId).Context;
-            var hashIM=ComputeHash(SCont);
-            var hashUS=engine.getAccountHash();
-            if (!db.CheckHashSend(hashIM,hashUS))
-            {   
-                var newIds =Ids.Take(Ids.Count - 1).ToList();
-                SentEmails(engine,db,newIds);
-                var savedPath = engine.SaveSentMail(SId);
-                db.SetNewSendMessage(hashIM, savedPath,hashUS);
+            var hashUS = engine.getAccountHash();
+            var pendingMessages = new List<(UniqueId Uid, string Hash)>();
+
+            for (int i = Ids.Count - 1; i >= 0; i--)
+            {
+                var uid = Ids[i];
+                var content = engine.GetMessage(sent, uid).Context;
+                var hash = ComputeHash(content);
+
+                if (db.CheckHashSend(hash, hashUS))
+                {
+                    break;
+                }
+
+                pendingMessages.Add((uid, hash));
+            }
+
+            for (int i = pendingMessages.Count - 1; i >= 0; i--)
+            {
+                var pending = pendingMessages[i];
+                var savedPath = engine.SaveMessage(sent, pending.Uid);
+                db.SetNewSendMessage(pending.Hash, savedPath, hashUS);
             }
         }
     }

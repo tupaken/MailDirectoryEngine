@@ -346,6 +346,67 @@ public class ImapEngineTests
     }
 
     /// <summary>
+    /// Verifies that inbox and sent operations can run inside one shared client session.
+    /// </summary>
+    [Fact]
+    public void WithClient_AllowsInboxAndSentReads_InSingleSession()
+    {
+        var inboxUid = new UniqueId(81);
+        var sentUid = new UniqueId(82);
+
+        var inbox = new FakeImapFolder(
+            name: "Inbox",
+            fullName: "Inbox",
+            count: 1,
+            searchResults: new[] { inboxUid },
+            messages: new Dictionary<UniqueId, MimeMessage>
+            {
+                [inboxUid] = CreateMessage("Inbox Subject", "Inbox text", "<p>Inbox html</p>")
+            });
+
+        var sentFolder = new FakeImapFolder(
+            name: "Gesendete Elemente",
+            fullName: "Root/Gesendete Elemente",
+            count: 1,
+            searchResults: new[] { sentUid },
+            messages: new Dictionary<UniqueId, MimeMessage>
+            {
+                [sentUid] = CreateMessage("Sent Subject", "Sent text", "<p>Sent html</p>")
+            });
+
+        var root = new FakeImapFolder(
+            name: "Root",
+            fullName: "Root",
+            count: 0,
+            subfolders: new[] { sentFolder });
+
+        var client = new FakeImapClient('/', root, inbox);
+        var factory = new FakeImapClientFactory(client);
+        var engine = new ImapEngine(
+            factory,
+            new FakeConfigProvider(),
+            "bewerbung",
+            "ACCOUNT_HASH");
+
+        engine.WithClient(connectedClient =>
+        {
+            var openedInbox = engine.GetInbox(connectedClient);
+            var inboxUids = engine.GetAllUIDS(openedInbox);
+            var inboxMessage = engine.GetMessage(openedInbox, inboxUids[^1]);
+
+            var openedSent = engine.GetSent(connectedClient);
+            var sentUids = engine.GetAllUIDS(openedSent);
+            var sentMessage = engine.GetMessage(openedSent, sentUids[^1]);
+
+            Assert.Equal("Inbox Subject", inboxMessage.Titel);
+            Assert.Equal("Sent Subject", sentMessage.Titel);
+        });
+
+        Assert.Equal(1, factory.CreateCalls);
+        Assert.Equal(1, client.DisconnectCallCount);
+    }
+
+    /// <summary>
     /// Verifies that the inbox folder is opened in read-only mode and returned unchanged.
     /// </summary>
     [Fact]
@@ -846,6 +907,8 @@ internal sealed class FakeImapClientFactory : IImapClientFactory
         _client = client;
     }
 
+    public int CreateCalls { get; private set; }
+
     /// <summary>
     /// Returns the preconfigured fake client.
     /// </summary>
@@ -853,6 +916,7 @@ internal sealed class FakeImapClientFactory : IImapClientFactory
     /// <returns>The fake client supplied to the constructor.</returns>
     public IImapClient Create(ImapConfig config)
     {
+        CreateCalls++;
         return _client;
     }
 }
@@ -916,6 +980,7 @@ internal sealed class FakeImapClient : IImapClient
     public char DirectorySeparator { get; }
     public IImapFolder Inbox { get; }
     public bool DisconnectCalled { get; private set; }
+    public int DisconnectCallCount { get; private set; }
 
     /// <summary>
     /// Returns the configured fake personal root folder.
@@ -933,6 +998,7 @@ internal sealed class FakeImapClient : IImapClient
     public void Disconnect(bool quit)
     {
         DisconnectCalled = true;
+        DisconnectCallCount++;
     }
 
     /// <summary>

@@ -105,6 +105,18 @@ Optional database UI:
 docker compose up -d adminer
 ```
 
+Start Ollama with GPU and auto-pull configured model:
+
+```powershell
+docker compose up -d ollama ollama-init
+```
+
+Check available models:
+
+```powershell
+docker compose exec ollama ollama list
+```
+
 Important migration rule:
 - Do not edit an already applied Flyway migration in shared or persistent databases.
 - Add a new file such as `DB/migrations/V2__describe_change.sql` for follow-up schema changes.
@@ -173,6 +185,25 @@ Run container:
 
 ```powershell
 docker run --rm maildirectoryengine:local
+```
+
+## LLM Runtime (Ollama / llama.cpp)
+
+The Python worker (`llm_service`) reads these root `.env` variables:
+- `LLM_BACKEND` (`ollama` or `llama_cpp`)
+- `LLM_ENDPOINT`
+- `LLM_MODEL`
+
+For low-end GPUs like NVIDIA Quadro P1000, use small models:
+- `LLM_MODEL=llama3.2:1b`
+- `OLLAMA_MODEL=llama3.2:1b`
+
+To switch to `llama.cpp`, run an OpenAI-compatible server and set:
+
+```powershell
+$env:LLM_BACKEND="llama_cpp"
+$env:LLM_ENDPOINT="http://localhost:8080"
+$env:LLM_MODEL="llama3.2:1b"
 ```
 
 ## Known warnings
