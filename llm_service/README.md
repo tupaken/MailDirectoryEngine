@@ -3,14 +3,16 @@
 Python worker for inbox post-processing:
 - reads unprocessed inbox rows from PostgreSQL (`e_mails_inbox.operated = false`)
 - converts HTML to plain text
-- sends text to a local Ollama model (`llama3.2`)
+- sends text to a configurable local LLM backend (`ollama` or `llama.cpp`)
 - prints the model result
 
 ## Requirements
 
 - Python `>=3.13`
 - PostgreSQL with applied migrations from `DB/migrations`
-- local Ollama endpoint at `http://localhost:11434`
+- one local LLM endpoint:
+  - Ollama (default): `http://localhost:11434`
+  - llama.cpp server: `http://localhost:8080` (OpenAI-compatible API)
 
 ## Environment Variables
 
@@ -22,6 +24,46 @@ Required variables:
 - `POSTGRES_HOST`
 - `POSTGRES_PORT`
 - `POSTGRES_DB`
+
+Optional LLM variables:
+- `LLM_BACKEND` (`ollama` default, alternatives: `llama_cpp`, `llama.cpp`)
+- `LLM_ENDPOINT` (default `http://localhost:11434` for Ollama, `http://localhost:8080` for llama.cpp)
+- `LLM_MODEL` (default `llama3.2:1b`)
+- `LLM_TIMEOUT_SECONDS` (default `120`)
+
+Optional Ollama runtime variables (used by Docker Compose):
+- `OLLAMA_MODEL` (auto-pulled model, default `llama3.2:1b`)
+- `OLLAMA_KEEP_ALIVE` (default `30m`)
+
+## Low-End GPU (NVIDIA Quadro P1000)
+
+Recommended defaults:
+- `LLM_MODEL=llama3.2:1b`
+- `OLLAMA_MODEL=llama3.2:1b`
+- `OLLAMA_KEEP_ALIVE=30m`
+
+Reason:
+- Quadro P1000 has limited VRAM (typically 4 GB). 1B models are much more stable and responsive than larger 3B/7B models on this GPU.
+
+## Backend Switch: Ollama <-> llama.cpp
+
+Use Ollama (default):
+
+```powershell
+$env:LLM_BACKEND="ollama"
+$env:LLM_ENDPOINT="http://localhost:11434"
+$env:LLM_MODEL="llama3.2:1b"
+```
+
+Use llama.cpp server:
+
+```powershell
+$env:LLM_BACKEND="llama_cpp"
+$env:LLM_ENDPOINT="http://localhost:8080"
+$env:LLM_MODEL="llama3.2:1b"
+```
+
+`llama.cpp` server must expose `/v1/chat/completions`.
 
 ## Install
 
