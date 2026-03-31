@@ -2,7 +2,7 @@
 
 from .DB.DBadapter import DB_adapter
 from .HTMLClean.htmlCleaner import html_to_text
-from .LLM.testConnection import test_connection
+from .LLM.Connection import test_connection
 
 
 def main() -> None:
