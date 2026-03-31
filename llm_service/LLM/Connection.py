@@ -13,7 +13,6 @@ from promtInbox import PROMPT_TEMPLATE
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=ENV_PATH if ENV_PATH.exists() else None)
 
-s
 
 
 def _build_prompt(mail: str) -> str:
