@@ -1,64 +1,60 @@
 """Unit tests for the llm_service main processing entry point."""
 
-import unittest
-from unittest.mock import Mock, call, patch
+import builtins
+from unittest.mock import Mock, call
+
+import pytest
 
 from llm_service.DB.messageModel import Message
-from llm_service.main import main
+from llm_service import main as main_module
 
 
-class MainTests(unittest.TestCase):
-    """Behavioral tests for ``main()`` orchestration."""
+def test_main_processes_messages_and_prints_only_allowed(monkeypatch):
+    """Each inbox message should be cleaned and classified once."""
 
-    @patch("builtins.print")
-    @patch("llm_service.main.test_connection")
-    @patch("llm_service.main.html_to_text")
-    @patch("llm_service.main.DB_adapter")
-    def test_main_processes_all_inbox_messages(
-        self,
-        db_adapter_cls,
-        html_to_text_mock,
-        test_connection_mock,
-        print_mock,
-    ):
-        """Each inbox message should be cleaned, classified, and printed."""
-        fake_db = Mock()
-        fake_db.get_new_messages_inbox.return_value = [
-            Message(id=1, content="<p>One</p>"),
-            Message(id=2, content="<p>Two</p>"),
-        ]
-        db_adapter_cls.return_value = fake_db
-        html_to_text_mock.side_effect = ["One", "Two"]
-        test_connection_mock.side_effect = ["True", "False"]
+    fake_db = Mock()
+    fake_db.get_new_messages_inbox.side_effect = [
+        [Message(id=1, content="<p>One</p>"), Message(id=2, content="<p>Two</p>")],
+        KeyboardInterrupt(),
+    ]
+    db_adapter_cls = Mock(return_value=fake_db)
+    html_to_text_mock = Mock(side_effect=["One", "Two"])
+    llm_connection_mock = Mock(
+        side_effect=[{"is_allowed": True, "full_name": "John Doe"}, None]
+    )
+    print_mock = Mock()
 
-        main()
+    monkeypatch.setattr(main_module, "DB_adapter", db_adapter_cls)
+    monkeypatch.setattr(main_module, "html_to_text", html_to_text_mock)
+    monkeypatch.setattr(main_module, "llm_connection", llm_connection_mock)
+    monkeypatch.setattr(builtins, "print", print_mock)
 
-        html_to_text_mock.assert_has_calls([call("<p>One</p>"), call("<p>Two</p>")])
-        test_connection_mock.assert_has_calls([call("One"), call("Two")])
-        print_mock.assert_has_calls([call("True\n"), call("False\n")])
+    with pytest.raises(KeyboardInterrupt):
+        main_module.main()
 
-    @patch("builtins.print")
-    @patch("llm_service.main.test_connection")
-    @patch("llm_service.main.html_to_text")
-    @patch("llm_service.main.DB_adapter")
-    def test_main_skips_processing_when_no_messages(
-        self,
-        db_adapter_cls,
-        html_to_text_mock,
-        test_connection_mock,
-        print_mock,
-    ):
-        """No processing should happen when no inbox rows are returned."""
-        fake_db = Mock()
-        fake_db.get_new_messages_inbox.return_value = []
-        db_adapter_cls.return_value = fake_db
-
-        main()
-
-        html_to_text_mock.assert_not_called()
-        test_connection_mock.assert_not_called()
-        print_mock.assert_not_called()
+    html_to_text_mock.assert_has_calls([call("<p>One</p>"), call("<p>Two</p>")])
+    llm_connection_mock.assert_has_calls([call("One"), call("Two")])
+    print_mock.assert_called_once_with({"is_allowed": True, "full_name": "John Doe"})
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_main_skips_processing_when_no_messages(monkeypatch):
+    """No classification/printing should happen when inbox polling is empty."""
+
+    fake_db = Mock()
+    fake_db.get_new_messages_inbox.side_effect = [[], KeyboardInterrupt()]
+    db_adapter_cls = Mock(return_value=fake_db)
+    html_to_text_mock = Mock()
+    llm_connection_mock = Mock()
+    print_mock = Mock()
+
+    monkeypatch.setattr(main_module, "DB_adapter", db_adapter_cls)
+    monkeypatch.setattr(main_module, "html_to_text", html_to_text_mock)
+    monkeypatch.setattr(main_module, "llm_connection", llm_connection_mock)
+    monkeypatch.setattr(builtins, "print", print_mock)
+
+    with pytest.raises(KeyboardInterrupt):
+        main_module.main()
+
+    html_to_text_mock.assert_not_called()
+    llm_connection_mock.assert_not_called()
+    print_mock.assert_not_called()

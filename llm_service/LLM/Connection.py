@@ -50,10 +50,14 @@ BUSINESS_LINE_HINTS = (
 
 
 def _build_prompt(mail: str) -> str:
+    """Render the inbox classification prompt with one mail payload."""
+
     return PROMPT_TEMPLATE.format(mail=mail)
 
 
 def _ollama_generate(prompt: str) -> str:
+    """Call Ollama generate endpoint and return raw model text."""
+
     host = os.getenv("LLM_ENDPOINT", "http://localhost:11434")
     model = os.getenv("LLM_MODEL", "llama3.2:1b")
     client = Client(host=host)
@@ -62,6 +66,8 @@ def _ollama_generate(prompt: str) -> str:
 
 
 def _llamacpp_generate(prompt: str) -> str:
+    """Call llama.cpp OpenAI-compatible endpoint and return raw model text."""
+
     endpoint = os.getenv("LLM_ENDPOINT", "http://localhost:8080").rstrip("/")
     model = os.getenv("LLM_MODEL", "")
     request_url = (
@@ -130,16 +136,22 @@ def test_connection(mail: str) -> dict | None:
 
 
 def _clean_text(value: object) -> str:
+    """Convert any value to normalized single-line text."""
+
     if value is None:
         return ""
     return re.sub(r"\s+", " ", str(value)).strip()
 
 
 def _is_placeholder(value: str) -> bool:
+    """Return True when a value looks like test/demo placeholder content."""
+
     return bool(PLACEHOLDER_RE.search(value))
 
 
 def _normalize_website(value: str) -> str:
+    """Normalize a website to a bare lowercase host for text matching."""
+
     website = value.strip().lower()
     website = re.sub(r"^https?://", "", website)
     website = website.split("/", 1)[0]
@@ -149,6 +161,8 @@ def _normalize_website(value: str) -> str:
 
 
 def _ascii_fold(value: str) -> str:
+    """Fold German umlauts/eszett to ASCII-compatible comparison form."""
+
     folded = value.translate(
         str.maketrans(
             {
@@ -166,6 +180,8 @@ def _ascii_fold(value: str) -> str:
 
 
 def _is_role_based_name(name: str, mail: str) -> bool:
+    """Detect names that only appear in management-role context."""
+
     folded_mail = _ascii_fold(mail)
     escaped_name = re.escape(_ascii_fold(name))
     left_context = rf"{ROLE_TITLE_PART}[^\n\r]{{0,40}}{escaped_name}"
@@ -176,6 +192,8 @@ def _is_role_based_name(name: str, mail: str) -> bool:
 
 
 def _value_in_mail(field: str, value: str, mail: str) -> bool:
+    """Check whether one extracted field value is explicitly present in mail text."""
+
     if not value:
         return False
 
@@ -195,6 +213,8 @@ def _value_in_mail(field: str, value: str, mail: str) -> bool:
 
 
 def _looks_like_person_name_line(line: str) -> bool:
+    """Heuristically validate whether a line resembles a real person name."""
+
     candidate = _clean_text(line).strip(" ,;:-")
     if not candidate:
         return False
@@ -211,6 +231,8 @@ def _looks_like_person_name_line(line: str) -> bool:
 
 
 def _extract_name_from_mail(mail: str) -> str:
+    """Infer contact name from labels, phone context, or signature fallback."""
+
     lines = [_clean_text(line) for line in mail.splitlines() if _clean_text(line)]
     if not lines:
         return ""
@@ -218,7 +240,8 @@ def _extract_name_from_mail(mail: str) -> str:
     # Prefer explicitly labeled contact names.
     labeled_pattern = re.compile(
         r"(?:contact|kontakt|ansprechpartner|name)\s*[:\-]\s*"
-        r"([A-Z\u00c4\u00d6\u00dc][\w'`\-]+(?:\s+[A-Z\u00c4\u00d6\u00dc][\w'`\-]+){1,2})"
+        r"([A-Z\u00c4\u00d6\u00dc][\w'`\-]+(?:\s+[A-Z\u00c4\u00d6\u00dc][\w'`\-]+){1,2})",
+        flags=re.IGNORECASE,
     )
     for line in lines:
         match = labeled_pattern.search(line)
@@ -260,6 +283,8 @@ def _extract_name_from_mail(mail: str) -> str:
 
 
 def _extract_contact(parsed: dict) -> dict:
+    """Extract one contact object from supported LLM response shapes."""
+
     contacts = parsed.get("contacts")
     if isinstance(contacts, list) and contacts and isinstance(contacts[0], dict):
         return contacts[0]
@@ -267,12 +292,15 @@ def _extract_contact(parsed: dict) -> dict:
 
 
 def _normalize_llm_result(parsed: dict, mail: str) -> dict:
+    """Apply hard business validation and normalize one parsed LLM result."""
+
     if not isinstance(parsed, dict):
         return {"is_allowed": False}
     if parsed.get("is_allowed") is not True:
         return {"is_allowed": False}
 
-    mail_text = _clean_text(mail)
+    mail_raw = "" if mail is None else str(mail)
+    mail_text = _clean_text(mail_raw)
     if not mail_text:
         return {"is_allowed": False}
 
@@ -284,7 +312,7 @@ def _normalize_llm_result(parsed: dict, mail: str) -> dict:
         if not raw_value:
             normalized[field] = ""
             continue
-        if field == "full_name" and _is_role_based_name(raw_value, mail_text):
+        if field == "full_name" and _is_role_based_name(raw_value, mail_raw):
             normalized[field] = ""
             continue
         if field == "full_name" and not _looks_like_person_name_line(raw_value):
@@ -304,7 +332,7 @@ def _normalize_llm_result(parsed: dict, mail: str) -> dict:
 
     # Ensure full_name is present when a phone number exists.
     if not normalized.get("full_name"):
-        inferred_name = _extract_name_from_mail(mail_text)
+        inferred_name = _extract_name_from_mail(mail_raw)
         if inferred_name and not _is_placeholder(inferred_name):
             normalized["full_name"] = inferred_name
     if not normalized.get("full_name"):
@@ -322,11 +350,15 @@ def _normalize_llm_result(parsed: dict, mail: str) -> dict:
 
 
 def _strip_markdown_fences(text: str) -> str:
+    """Remove markdown code fences around JSON-like model output."""
+
     cleaned = re.sub(r"```(?:json)?", "", text, flags=re.IGNORECASE)
     return cleaned.replace("```", "").strip()
 
 
 def _extract_json_object_candidates(text: str) -> list[str]:
+    """Extract balanced JSON object substrings from arbitrary text."""
+
     candidates: list[str] = []
     depth = 0
     start = None
@@ -367,6 +399,8 @@ def _extract_json_object_candidates(text: str) -> list[str]:
 
 
 def _load_json_object(text: str) -> dict | None:
+    """Parse one JSON/Python-like object string into a JSON-compatible dict."""
+
     normalized = text.strip()
     if not normalized:
         return None
@@ -401,6 +435,8 @@ def _load_json_object(text: str) -> dict | None:
 
 
 def parse_llm_json(raw: str) -> dict:
+    """Parse and return the first allowed JSON object found in LLM output."""
+
     if not raw or raw.strip() == "":
         raise RuntimeError("LLM returned empty response")
 

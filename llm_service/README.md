@@ -4,7 +4,30 @@ Python worker for inbox post-processing:
 - reads unprocessed inbox rows from PostgreSQL (`e_mails_inbox.operated = false`)
 - converts HTML to plain text
 - sends text to a configurable local LLM backend (`ollama` or `llama.cpp`)
-- prints the model result
+- prints only validated `is_allowed = true` results
+
+## Classification Output
+
+- The worker calls `llm_connection(text)` for each inbox message.
+- `llm_connection` returns either:
+  - a normalized contact `dict` with `is_allowed = true`, or
+  - `None` (not printed) when the result is invalid or filtered out.
+- This means `{"is_allowed": false}` objects are intentionally not printed.
+
+### Validation Rules (post-processing)
+
+- `phone` is mandatory for allowed results.
+- If `phone` exists, `full_name` must be present.
+- `full_name` is rejected when it is role-based (for example Geschäftsführer/CEO/Inhaber/Vorstand/GF context).
+- Placeholder/test values (`test`, `demo`, `sample`, `dummy`, `example`) are rejected.
+- Values not present in the original mail text are removed.
+
+### Name Extraction Fallback
+
+If the model does not provide a valid `full_name`, the service tries to infer it from the mail text:
+- explicit contact labels (for example `Kontakt:` / `Ansprechpartner:` / `Name:`),
+- nearest person-like line above a phone line,
+- signature area after `Mit freundlichen Gruessen`.
 
 ## Requirements
 
