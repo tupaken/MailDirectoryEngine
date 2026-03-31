@@ -99,6 +99,28 @@ class TestConnectionTests(unittest.TestCase):
         result = run_llm_connection("John Doe")
         self.assertIsNone(result)
 
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("llm_service.LLM.Connection.parse_llm_json", side_effect=RuntimeError("bad output"))
+    @patch("llm_service.LLM.Connection.Client")
+    def test_test_connection_extracts_all_structured_contacts_when_parser_fails(
+        self, client_cls, _parse_mock
+    ):
+        """Structured contact lists should still be extracted without valid LLM JSON."""
+
+        fake_client = Mock()
+        fake_client.generate.return_value = {"response": "RAW-OLLAMA"}
+        client_cls.return_value = fake_client
+
+        mail = """
+Nordwerk Services - Nina Becker; +999 170 1112233; nina.becker@nordwerk-services.de
+Astera Technik - Leon Hartmann; +999 351 5558800; service@astera-technik.de
+"""
+        result = run_llm_connection(mail)
+
+        self.assertIsInstance(result, list)
+        self.assertEqual(2, len(result))
+        self.assertEqual(["Nina Becker", "Leon Hartmann"], [item["full_name"] for item in result])
+
 
 if __name__ == "__main__":
     unittest.main()

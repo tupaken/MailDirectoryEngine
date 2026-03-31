@@ -58,3 +58,39 @@ def test_main_skips_processing_when_no_messages(monkeypatch):
     html_to_text_mock.assert_not_called()
     llm_connection_mock.assert_not_called()
     print_mock.assert_not_called()
+
+
+def test_main_prints_each_contact_when_classifier_returns_list(monkeypatch):
+    """List responses should be printed as one line per contact."""
+
+    fake_db = Mock()
+    fake_db.get_new_messages_inbox.side_effect = [
+        [Message(id=1, content="<p>List Case</p>")],
+        KeyboardInterrupt(),
+    ]
+    db_adapter_cls = Mock(return_value=fake_db)
+    html_to_text_mock = Mock(return_value="List Case")
+    llm_connection_mock = Mock(
+        return_value=[
+            {"is_allowed": True, "full_name": "Nina Becker", "phone": "+999 170 1112233"},
+            {"is_allowed": True, "full_name": "Leon Hartmann", "phone": "+999 351 5558800"},
+        ]
+    )
+    print_mock = Mock()
+
+    monkeypatch.setattr(main_module, "DB_adapter", db_adapter_cls)
+    monkeypatch.setattr(main_module, "html_to_text", html_to_text_mock)
+    monkeypatch.setattr(main_module, "llm_connection", llm_connection_mock)
+    monkeypatch.setattr(builtins, "print", print_mock)
+
+    with pytest.raises(KeyboardInterrupt):
+        main_module.main()
+
+    llm_connection_mock.assert_called_once_with("List Case")
+    assert print_mock.call_count == 2
+    print_mock.assert_has_calls(
+        [
+            call({"is_allowed": True, "full_name": "Nina Becker", "phone": "+999 170 1112233"}),
+            call({"is_allowed": True, "full_name": "Leon Hartmann", "phone": "+999 351 5558800"}),
+        ]
+    )

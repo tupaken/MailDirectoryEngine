@@ -6,7 +6,7 @@ from .LLM.Connection import llm_connection
 
 
 def main() -> None:
-    """Load unprocessed inbox messages and print one LLM result per message."""
+    """Load unprocessed inbox messages and print allowed LLM result(s)."""
 
     db = DB_adapter()
     while(True):
@@ -15,8 +15,13 @@ def main() -> None:
             for message in messages:
                 text = html_to_text(message.content or "")
                 result = llm_connection(text)
-                if result:
-                    print(result)
+                if not result:
+                    continue
+                if isinstance(result, list):
+                    for contact in result:
+                        print(contact)
+                    continue
+                print(result)
 
 
 if __name__ == "__main__":

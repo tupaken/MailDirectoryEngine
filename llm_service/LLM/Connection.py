@@ -19,11 +19,19 @@ ALLOWED_FIELDS = ("full_name", "company", "email", "phone", "address", "website"
 PLACEHOLDER_RE = re.compile(r"\b(test\d*|demo|sample|dummy|example)\b", re.IGNORECASE)
 ROLE_TITLE_PART = r"(?:geschaeftsfuehrer(?:in)?|ceo|inhaber|vorstand|gf)"
 PHONE_RE = re.compile(r"(?:(?:\+|00)\d[\d\s()/-]{5,}\d|\b\d{6,}\b)")
+EMAIL_RE = re.compile(r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", re.IGNORECASE)
 NAME_RE = re.compile(
     r"([A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df]+(?:[-'][A-Z\u00c4\u00d6\u00dc]?[a-z\u00e4\u00f6\u00fc\u00df]+)?"
     r"(?:\s+[A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df]+(?:[-'][A-Z\u00c4\u00d6\u00dc]?[a-z\u00e4\u00f6\u00fc\u00df]+)?){1,2})"
 )
 NAME_RE_ALL_CAPS = re.compile(r"([A-Z\u00c4\u00d6\u00dc]{2,}(?:\s+[A-Z\u00c4\u00d6\u00dc]{2,}){1,2})")
+CONTACT_LIST_LINE_RE = re.compile(
+    r"(?P<company>[^\n;]+?)\s*[-\u2013\u2014]\s*"
+    r"(?P<full_name>[A-Z\u00c4\u00d6\u00dc][\w'`\-]+(?:\s+[A-Z\u00c4\u00d6\u00dc][\w'`\-]+){1,2})\s*;\s*"
+    r"(?P<phone>(?:(?:\+|00)\d[\d\s()/-]{5,}\d|\b\d{6,}\b))"
+    r"(?:\s*;\s*(?P<email>[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}))?",
+    flags=re.IGNORECASE,
+)
 BUSINESS_LINE_HINTS = (
     "telefon",
     "telefax",
@@ -103,8 +111,8 @@ def _llamacpp_generate(prompt: str) -> str:
         raise RuntimeError("llama.cpp response format is invalid.") from exc
 
 
-def llm_connection(mail: str) -> dict | None:
-    """Send one mail text to configured LLM backend and return allowed result only."""
+def llm_connection(mail: str) -> dict | list[dict] | None:
+    """Send one mail text to configured LLM backend and return allowed result(s)."""
 
     prompt = _build_prompt(mail)
     backend = os.getenv("LLM_BACKEND", "ollama").strip().lower().replace("-", "_")
@@ -118,18 +126,24 @@ def llm_connection(mail: str) -> dict | None:
             "Unsupported LLM_BACKEND. Use one of: ollama, llama_cpp, llama.cpp, llamacpp."
         )
 
+    parsed: dict = {}
     try:
         parsed = parse_llm_json(raw_response)
     except RuntimeError:
+        parsed = {}
+
+    normalized_contacts = _normalize_llm_contacts(parsed, mail)
+    list_contacts = _extract_structured_contacts_from_mail(mail)
+    contacts = _dedupe_contacts(normalized_contacts + list_contacts)
+
+    if not contacts:
         return None
-
-    normalized = _normalize_llm_result(parsed, mail)
-    if normalized.get("is_allowed") is True:
-        return normalized
-    return None
+    if len(contacts) == 1:
+        return contacts[0]
+    return contacts
 
 
-def test_connection(mail: str) -> dict | None:
+def test_connection(mail: str) -> dict | list[dict] | None:
     """Backward-compatible wrapper kept for existing callers/tests."""
 
     return llm_connection(mail)
@@ -230,7 +244,75 @@ def _looks_like_person_name_line(line: str) -> bool:
     return bool(NAME_RE.fullmatch(candidate) or NAME_RE_ALL_CAPS.fullmatch(candidate))
 
 
-def _extract_name_from_mail(mail: str) -> str:
+def _phone_digits(value: str) -> str:
+    """Return only digit characters from one phone-like value."""
+
+    return re.sub(r"\D", "", value or "")
+
+
+def _extract_name_from_phone_line(line: str) -> str:
+    """Extract a person-like name from one line that also contains a phone number."""
+
+    cleaned_line = _clean_text(line)
+    if not cleaned_line or not PHONE_RE.search(cleaned_line):
+        return ""
+
+    # Common contact-list format: "Company - First Last; +49 ...; mail@company.de"
+    dash_match = re.search(
+        r"[-\u2013\u2014]\s*"
+        r"([A-Z\u00c4\u00d6\u00dc][\w'`\-]+(?:\s+[A-Z\u00c4\u00d6\u00dc][\w'`\-]+){1,2})"
+        r"\s*(?=;|,|$)",
+        cleaned_line,
+    )
+    if dash_match:
+        candidate = _clean_text(dash_match.group(1)).strip(" ,;:-")
+        if _looks_like_person_name_line(candidate):
+            return candidate
+
+    phone_match = PHONE_RE.search(cleaned_line)
+    if not phone_match:
+        return ""
+    before_phone = cleaned_line[: phone_match.start()].strip(" ,;:-")
+    if not before_phone:
+        return ""
+
+    labeled_match = re.search(
+        r"(?:contact|kontakt|ansprechpartner|name)\s*[:\-]\s*"
+        r"([A-Z\u00c4\u00d6\u00dc][\w'`\-]+(?:\s+[A-Z\u00c4\u00d6\u00dc][\w'`\-]+){1,2})$",
+        before_phone,
+        flags=re.IGNORECASE,
+    )
+    if labeled_match:
+        candidate = _clean_text(labeled_match.group(1)).strip(" ,;:-")
+        if _looks_like_person_name_line(candidate):
+            return candidate
+
+    if ";" in before_phone:
+        parts = [part.strip(" ,;:-") for part in before_phone.split(";") if part.strip(" ,;:-")]
+        if parts:
+            before_phone = parts[-1]
+
+    dash_parts = [
+        part.strip(" ,;:-")
+        for part in re.split(r"\s[-\u2013\u2014]\s", before_phone)
+        if part.strip(" ,;:-")
+    ]
+    if dash_parts:
+        before_phone = dash_parts[-1]
+
+    if _looks_like_person_name_line(before_phone):
+        return before_phone
+
+    inline_names = NAME_RE.findall(cleaned_line)
+    for candidate in reversed(inline_names):
+        candidate = _clean_text(candidate).strip(" ,;:-")
+        if _looks_like_person_name_line(candidate):
+            return candidate
+
+    return ""
+
+
+def _extract_name_from_mail(mail: str, phone: str = "") -> str:
     """Infer contact name from labels, phone context, or signature fallback."""
 
     lines = [_clean_text(line) for line in mail.splitlines() if _clean_text(line)]
@@ -251,9 +333,24 @@ def _extract_name_from_mail(mail: str) -> str:
         if _looks_like_person_name_line(candidate) and not _is_role_based_name(candidate, mail):
             return candidate
 
-    # Best effort: nearest valid person-name line above a phone line.
-    phone_indexes = [idx for idx, line in enumerate(lines) if PHONE_RE.search(line)]
+    # Best effort: extract from the phone line itself or nearest valid name line above it.
+    target_phone_digits = _phone_digits(phone)
+    phone_indexes = []
+    for idx, line in enumerate(lines):
+        if not PHONE_RE.search(line):
+            continue
+        if target_phone_digits and target_phone_digits not in _phone_digits(line):
+            continue
+        phone_indexes.append(idx)
+
+    if not phone_indexes:
+        phone_indexes = [idx for idx, line in enumerate(lines) if PHONE_RE.search(line)]
+
     for phone_idx in phone_indexes:
+        inline_candidate = _extract_name_from_phone_line(lines[phone_idx])
+        if inline_candidate and not _is_role_based_name(inline_candidate, mail):
+            return inline_candidate
+
         start = max(0, phone_idx - 16)
         for line_idx in range(phone_idx - 1, start - 1, -1):
             candidate = lines[line_idx].strip(" ,;:-")
@@ -289,6 +386,20 @@ def _extract_contact(parsed: dict) -> dict:
     if isinstance(contacts, list) and contacts and isinstance(contacts[0], dict):
         return contacts[0]
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _extract_contacts(parsed: dict) -> list[dict]:
+    """Extract all contact objects from supported LLM response shapes."""
+
+    if not isinstance(parsed, dict):
+        return []
+
+    contacts = parsed.get("contacts")
+    if isinstance(contacts, list):
+        result = [contact for contact in contacts if isinstance(contact, dict)]
+        return result
+
+    return [parsed]
 
 
 def _normalize_llm_result(parsed: dict, mail: str) -> dict:
@@ -332,7 +443,7 @@ def _normalize_llm_result(parsed: dict, mail: str) -> dict:
 
     # Ensure full_name is present when a phone number exists.
     if not normalized.get("full_name"):
-        inferred_name = _extract_name_from_mail(mail_raw)
+        inferred_name = _extract_name_from_mail(mail_raw, str(normalized.get("phone", "")))
         if inferred_name and not _is_placeholder(inferred_name):
             normalized["full_name"] = inferred_name
     if not normalized.get("full_name"):
@@ -347,6 +458,98 @@ def _normalize_llm_result(parsed: dict, mail: str) -> dict:
         return {"is_allowed": False}
 
     return normalized
+
+
+def _normalize_llm_contacts(parsed: dict, mail: str) -> list[dict]:
+    """Normalize every parsed contact and keep only allowed entries."""
+
+    if not isinstance(parsed, dict):
+        return []
+
+    results: list[dict] = []
+    for contact in _extract_contacts(parsed):
+        candidate = dict(contact)
+        if "is_allowed" not in candidate:
+            candidate["is_allowed"] = parsed.get("is_allowed")
+        normalized = _normalize_llm_result(candidate, mail)
+        if normalized.get("is_allowed") is True:
+            results.append(normalized)
+
+    return _dedupe_contacts(results)
+
+
+def _contact_dedupe_key(contact: dict) -> tuple[str, str, str]:
+    """Build a stable deduplication key for one normalized contact."""
+
+    phone_key = _phone_digits(str(contact.get("phone", "")))
+    email_key = _clean_text(contact.get("email", "")).casefold()
+    name_key = _ascii_fold(_clean_text(contact.get("full_name", "")))
+    return (phone_key, email_key, name_key)
+
+
+def _dedupe_contacts(contacts: list[dict]) -> list[dict]:
+    """Remove duplicate contacts while preserving first-seen order."""
+
+    deduped: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    for contact in contacts:
+        key = _contact_dedupe_key(contact)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(contact)
+    return deduped
+
+
+def _extract_structured_contacts_from_mail(mail: str) -> list[dict]:
+    """Extract contacts from list-like lines: 'Company - Name; Phone; Email'."""
+
+    if mail is None:
+        return []
+
+    extracted: list[dict] = []
+    lines = [_clean_text(raw_line) for raw_line in str(mail).splitlines()]
+    for idx, line in enumerate(lines):
+        if not line:
+            continue
+
+        match = CONTACT_LIST_LINE_RE.search(line)
+        if not match:
+            continue
+
+        company = _clean_text(match.group("company")).strip(" ,;:-")
+        full_name = _clean_text(match.group("full_name")).strip(" ,;:-")
+        phone = _clean_text(match.group("phone"))
+        email_match = EMAIL_RE.search(line)
+        email = _clean_text(email_match.group(0)) if email_match else ""
+        if not email:
+            # Some mail cleaners split "company/name/phone;" and email onto the next line.
+            end = min(len(lines), idx + 4)
+            for next_idx in range(idx + 1, end):
+                next_line = lines[next_idx]
+                if not next_line:
+                    continue
+                if CONTACT_LIST_LINE_RE.search(next_line):
+                    break
+                next_email_match = EMAIL_RE.search(next_line)
+                if next_email_match:
+                    email = _clean_text(next_email_match.group(0))
+                    break
+
+        parsed = {
+            "is_allowed": True,
+            "full_name": full_name,
+            "company": company,
+            "email": email,
+            "phone": phone,
+            "address": "",
+            "website": "",
+        }
+        normalized = _normalize_llm_result(parsed, str(mail))
+        if normalized.get("is_allowed") is True:
+            extracted.append(normalized)
+
+    return _dedupe_contacts(extracted)
 
 
 def _strip_markdown_fences(text: str) -> str:
