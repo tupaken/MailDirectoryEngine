@@ -2,7 +2,7 @@
 
 from .DB.DBadapter import DB_adapter
 from .HTMLClean.htmlCleaner import html_to_text
-from .LLM.Connection import test_connection
+from .LLM.Connection import llm_connection
 
 
 def main() -> None:
@@ -14,7 +14,9 @@ def main() -> None:
         if len(messages) > 0:
             for message in messages:
                 text = html_to_text(message.content or "")
-                print(test_connection(text) + "\n")
+                result = llm_connection(text)
+                if result:
+                    print(result)
 
 
 if __name__ == "__main__":
