@@ -19,7 +19,7 @@ def main() -> None:
                     continue
                 if isinstance(result, list):
                     for contact in result:
-                        print(contact)
+                        print(contact.get("full_name"))
                     continue
                 print(result.get("full_name"))
 
