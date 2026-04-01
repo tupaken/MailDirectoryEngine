@@ -28,3 +28,7 @@ Thumbs.db
 
 # Local .NET CLI state
 .dotnet/
+
+# .NET build outputs
+**/bin/
+**/obj/
