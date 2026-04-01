@@ -4,7 +4,7 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from llm_service.LLM.Connection import test_connection as run_llm_connection
+from llmService.LLM.Connection import test_connection as run_llm_connection
 
 
 class TestConnectionTests(unittest.TestCase):

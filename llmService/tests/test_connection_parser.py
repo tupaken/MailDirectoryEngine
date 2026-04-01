@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_service.LLM.Connection import (
+from llmService.LLM.Connection import (
     _extract_structured_contacts_from_mail,
     _normalize_llm_result,
     parse_llm_json,

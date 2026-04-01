@@ -2,7 +2,7 @@
 
 import unittest
 
-from llm_service.HTMLClean.htmlCleaner import html_to_text
+from llmService.HTMLClean.htmlCleaner import html_to_text
 
 
 class HtmlCleanerTests(unittest.TestCase):
