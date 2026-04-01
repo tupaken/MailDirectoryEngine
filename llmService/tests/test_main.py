@@ -5,8 +5,8 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from llm_service.DB.messageModel import Message
-from llm_service import main as main_module
+from llmService.DB.messageModel import Message
+from llmService import main as main_module
 
 
 def test_main_processes_messages_and_prints_only_allowed(monkeypatch):

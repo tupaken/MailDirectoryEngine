@@ -2,7 +2,7 @@
 
 import unittest
 
-from llm_service.DB.messageModel import Message
+from llmService.DB.messageModel import Message
 
 
 class MessageModelTests(unittest.TestCase):
