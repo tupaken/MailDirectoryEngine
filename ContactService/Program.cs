@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 var accountKey = Environment.GetEnvironmentVariable("EWS_ACCOUNT_KEY") ?? "bewerbung";
 
 try
@@ -9,13 +11,24 @@ try
     var contacts = await engine.GetAllContactsAsync(pageSize: 100, CancellationToken.None);
 
     Console.WriteLine($"Loaded contacts: {contacts.Count}");
-    foreach (var contact in contacts.Take(10))
+    foreach (var contact in contacts)
     {
-        Console.WriteLine($"{contact.DisplayName} | {contact.Email}");
+        Console.WriteLine(contact.MobilePhone+ " | "+contact.Company);
     }
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"Contact sync failed: {ex.Message}");
+    Console.Error.WriteLine("Contact sync failed.");
+    Console.Error.WriteLine(ex.ToString());
+
+    var inner = ex.InnerException;
+    var depth = 1;
+    while (inner is not null)
+    {
+        Console.Error.WriteLine($"Inner[{depth}] {inner.GetType().Name}: {inner.Message}");
+        inner = inner.InnerException;
+        depth++;
+    }
+
     Environment.ExitCode = 1;
 }
