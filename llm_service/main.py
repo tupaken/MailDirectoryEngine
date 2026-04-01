@@ -21,7 +21,7 @@ def main() -> None:
                     for contact in result:
                         print(contact)
                     continue
-                print(result)
+                print(result.get("full_name"))
 
 
 if __name__ == "__main__":

@@ -200,6 +200,25 @@ Rheinufer Bau - Tom Faber; +999 221 4455667; tom.faber@rheinufer-bau.de
     assert result["full_name"] == "Leon Hartmann"
 
 
+def test_normalize_result_matches_labeled_name_to_target_phone():
+    parsed = {
+        "is_allowed": True,
+        "full_name": "",
+        "company": "Acme Co",
+        "phone": "+999 222222",
+    }
+    mail = """
+Kontakt: Anna Meyer
+Telefon: +999 111111
+Kontakt: Bob Schmidt
+Telefon: +999 222222
+Acme Co
+"""
+    result = _normalize_llm_result(parsed, mail)
+    assert result["is_allowed"] is True
+    assert result["full_name"] == "Bob Schmidt"
+
+
 def test_extract_structured_contacts_from_mail_returns_all_contacts():
     mail = """
 Wie besprochen sind dies die jeweiligen Ansprechpartner:
@@ -237,3 +256,12 @@ service@astera-technik.invalid
     assert len(contacts) == 2
     assert contacts[0]["email"] == "nina.becker@nordwerk-services.invalid"
     assert contacts[1]["email"] == "service@astera-technik.invalid"
+
+
+def test_parse_llm_json_keeps_keyword_words_inside_string_values():
+    raw = """
+{"is_allowed": true, "company": "None GmbH", "full_name": "John Doe", "phone": "+999 333444"}
+"""
+    parsed = parse_llm_json(raw)
+    assert parsed["is_allowed"] is True
+    assert parsed["company"] == "None GmbH"
