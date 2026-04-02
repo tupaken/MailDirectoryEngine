@@ -42,4 +42,16 @@ internal sealed class ExchangeContactEngine
 
         return all;
     }
+
+    public async Task AddContactAsync(ContactDto dto, CancellationToken ct)
+    {
+        if (dto is null)
+            throw new ArgumentNullException(nameof(dto));
+
+        var config = _configProvider.GetConfig(_accountKey);
+        using var client = _factory.Create(config);
+
+        await client.AddContactAsync(dto, ct).ConfigureAwait(false);
+    }
+
 }

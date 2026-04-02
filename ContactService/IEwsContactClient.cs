@@ -1,6 +1,7 @@
 internal interface IEwsContactClient : IDisposable
 {
     Task<ContactPageDto> GetContactsPageAsync(int offset, int pageSize, CancellationToken ct);
+    Task AddContactAsync(ContactDto dto, CancellationToken ct);
 }
 
 internal interface IEwsContactClientFactory

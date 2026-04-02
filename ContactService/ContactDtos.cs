@@ -7,7 +7,7 @@ internal sealed record ContactAddressDto(
 );
 
 internal sealed record ContactDto(
-    string Id,
+    string? Id,
     string DisplayName,
     string? GivenName,
     string? MiddleName,
@@ -28,7 +28,14 @@ internal sealed record ContactDto(
     string? BusinessFax,
     string? MobilePhone,
     string? Notes
-);
+)
+{
+    public ContactDto(string DisplayName, string Email)
+    {
+        this.DisplayName = DisplayName;
+        this.Email = Email;
+    }
+}
 
 internal sealed record ContactPageDto(
     IReadOnlyList<ContactDto> Items,

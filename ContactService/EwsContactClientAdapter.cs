@@ -181,6 +181,109 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         }
     }
 
+    public async System.Threading.Tasks.Task AddContactAsync(ContactDto dto, CancellationToken ct)
+    {
+        if (dto is null)
+            throw new ArgumentNullException(nameof(dto));
+
+        var contact = new Contact(_service);
+        MapToEwsContact(contact, dto);
+
+        await System.Threading.Tasks.Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            contact.Save(WellKnownFolderName.Contacts);
+        }, ct).ConfigureAwait(false);
+    }
+
+    private static void MapToEwsContact(Contact contact, ContactDto dto)
+    {
+        contact.DisplayName = dto.DisplayName;
+        contact.GivenName = dto.GivenName;
+        contact.MiddleName = dto.MiddleName;
+        contact.Surname = dto.Surname;
+        contact.CompanyName = dto.Company;
+        contact.JobTitle = dto.JobTitle;
+        contact.FileAs = dto.FileAs;
+        contact.BusinessHomePage = dto.WebPage;
+
+        if (!string.IsNullOrWhiteSpace(dto.Notes))
+            contact.Body = dto.Notes;
+
+        MapEmails(contact, dto);
+        MapPhones(contact, dto);
+        MapAddresses(contact, dto);
+    }
+
+    private static void MapEmails(Contact contact, ContactDto dto)
+    {
+        if (dto.Emails is null)
+            return;
+
+        foreach (var kv in dto.Emails)
+        {
+            if (string.IsNullOrWhiteSpace(kv.Value))
+                continue;
+
+            if (Enum.TryParse<EmailAddressKey>(kv.Key, ignoreCase: true, out var key))
+                contact.EmailAddresses[key] = kv.Value;
+        }
+    }
+
+    private static void MapPhones(Contact contact, ContactDto dto)
+    {
+        if (dto.PhoneNumbers is not null)
+        {
+            foreach (var kv in dto.PhoneNumbers)
+            {
+                if (string.IsNullOrWhiteSpace(kv.Value))
+                    continue;
+
+                if (Enum.TryParse<PhoneNumberKey>(kv.Key, ignoreCase: true, out var key))
+                    contact.PhoneNumbers[key] = kv.Value;
+            }
+        }
+
+        SetPhoneIfPresent(contact, PhoneNumberKey.BusinessPhone, dto.BusinessPhone);
+        SetPhoneIfPresent(contact, PhoneNumberKey.HomePhone, dto.HomePhone);
+        SetPhoneIfPresent(contact, PhoneNumberKey.MobilePhone, dto.MobilePhone);
+        SetPhoneIfPresent(contact, PhoneNumberKey.BusinessFax, dto.BusinessFax);
+    }
+
+    private static void SetPhoneIfPresent(Contact contact, PhoneNumberKey key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            contact.PhoneNumbers[key] = value;
+    }
+
+    private static void MapAddresses(Contact contact, ContactDto dto)
+    {
+        if (dto.Addresses is null)
+            return;
+
+        foreach (var kv in dto.Addresses)
+        {
+            if (!Enum.TryParse<PhysicalAddressKey>(kv.Key, ignoreCase: true, out var key))
+                continue;
+
+            var address = kv.Value;
+            contact.PhysicalAddresses[key] = new PhysicalAddressEntry
+            {
+                Street = address.Street,
+                City = address.City,
+                State = address.State,
+                PostalCode = address.PostalCode,
+                CountryOrRegion = address.CountryOrRegion
+            };
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.PostalAddressKey) &&
+            Enum.TryParse<PhysicalAddressIndex>(dto.PostalAddressKey, ignoreCase: true, out var postalIndex))
+        {
+            contact.PostalAddressIndex = postalIndex;
+        }
+    }
+
     private static string? TryGetString(Contact contact, PropertyDefinitionBase property)
     {
         return contact.TryGetProperty(property, out string value) ? value : null;
