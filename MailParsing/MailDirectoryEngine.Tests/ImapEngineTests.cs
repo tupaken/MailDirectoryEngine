@@ -658,12 +658,12 @@ public class ImapEngineTests
 
         try
         {
-            var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
             var savedFile = engine.SaveInboxMail(uid);
 
-            Assert.Equal(expectedFile, savedFile);
-            Assert.True(File.Exists(expectedFile));
-            Assert.Contains("Saved Subject", File.ReadAllText(expectedFile));
+            Assert.StartsWith(savePath, savedFile, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(savedFile));
+            Assert.Matches($@"^{uid.Id}_[0-9a-f]{{6}}\.eml$", Path.GetFileName(savedFile));
+            Assert.Contains("Saved Subject", File.ReadAllText(savedFile));
             Assert.True(client.DisconnectCalled);
         }
         finally
@@ -774,12 +774,12 @@ public class ImapEngineTests
 
         try
         {
-            var expectedFile = Path.Combine(savePath, $"{uid.Id}.eml");
             var savedFile = engine.SaveSentMail(uid);
 
-            Assert.Equal(expectedFile, savedFile);
-            Assert.True(File.Exists(expectedFile));
-            Assert.Contains("Saved Sent Subject", File.ReadAllText(expectedFile));
+            Assert.StartsWith(savePath, savedFile, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(savedFile));
+            Assert.Matches($@"^{uid.Id}_[0-9a-f]{{6}}\.eml$", Path.GetFileName(savedFile));
+            Assert.Contains("Saved Sent Subject", File.ReadAllText(savedFile));
             Assert.True(client.DisconnectCalled);
         }
         finally

@@ -1,66 +1,78 @@
-using System.ComponentModel;
+using System.Text.Json.Serialization;
 
-class Program
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    static async Task Main(string[] args)
+    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+});
+builder.Services.AddSingleton<IEwsConfigProvider, EnvEwsConfigProvider>();
+builder.Services.AddSingleton<IEwsContactClientFactory, EwsContactService>();
+
+var app = builder.Build();
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+app.MapGet("/api/contacts", async Task<IResult> (
+    int? pageSize,
+    string? accountKey,
+    IEwsContactClientFactory factory,
+    IEwsConfigProvider configProvider,
+    CancellationToken ct) =>
+{
+    var resolvedPageSize = pageSize is > 0 and <= 500 ? pageSize.Value : 100;
+    var resolvedAccountKey = ResolveAccountKey(accountKey);
+
+    var engine = new ExchangeContactEngine(factory, configProvider, resolvedAccountKey);
+    var contacts = await engine.GetAllContactsAsync(resolvedPageSize, ct).ConfigureAwait(false);
+
+    return Results.Ok(new
     {
-        var accountKey = Environment.GetEnvironmentVariable("EWS_ACCOUNT_KEY") ?? "bewerbung";
-        try
-        {
-            var provider = new EnvEwsConfigProvider();
-            var factory = new EwsContactService();
-            var engine = new ExchangeContactEngine(factory, provider, accountKey);
+        account_key = resolvedAccountKey,
+        count = contacts.Count,
+        items = contacts
+    });
+});
 
-            var contacts = await engine.GetAllContactsAsync(pageSize: 100, CancellationToken.None);
-            
-            Console.WriteLine($"Loaded contacts: {contacts.Count}");
-            foreach (var contact in contacts)
-            {
-                Console.WriteLine(contact.MobilePhone + " | " + contact.Company);
-            }
+app.MapPost("/api/contacts/canonical", async Task<IResult> (
+    CanonicalContactEnvelopeDto payload,
+    IEwsContactClientFactory factory,
+    IEwsConfigProvider configProvider,
+    CancellationToken ct) =>
+{
+    var validationError = CanonicalContactValidator.Validate(payload);
+    if (validationError is not null)
+        return Results.BadRequest(new { error = validationError });
 
-            var dto = new ContactDto(
-                Id: null, // oder ""
-                DisplayName: "Max Mustermann2",
-                GivenName: "Max2",
-                MiddleName: null,
-                Surname: "Mustermann",
-                Company: null,
-                JobTitle: null,
-                FileAs: null,
-                WebPage: null,
-                EmailDisplayNames: new Dictionary<string, string>(),
-                Emails: new Dictionary<string, string>{["EmailAddress1"] = "max@firma.de"},
-                ImAddresses: new Dictionary<string, string>(),
-                PhoneNumbers: new Dictionary<string, string>(),
-                Addresses: new Dictionary<string, ContactAddressDto>(),
-                PostalAddressKey: null,
-                Email: null,
-                BusinessPhone: "+49-12321-12321",
-                HomePhone: null,
-                BusinessFax: null,
-                MobilePhone: null,
-                Notes: "automatisch angelegt"
-            );
+    var resolvedAccountKey = ResolveAccountKey(payload.AccountKey);
+    var dto = CanonicalContactMapper.ToContactDto(payload);
+    var engine = new ExchangeContactEngine(factory, configProvider, resolvedAccountKey);
 
-            await engine.AddContactAsync(dto,CancellationToken.None);
-            
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine("Contact sync failed.");
-            Console.Error.WriteLine(ex.ToString());
+    await engine.AddContactAsync(dto, ct).ConfigureAwait(false);
 
-            var inner = ex.InnerException;
-            var depth = 1;
-            while (inner is not null)
-            {
-                Console.Error.WriteLine($"Inner[{depth}] {inner.GetType().Name}: {inner.Message}");
-                inner = inner.InnerException;
-                depth++;
-            }
+    return Results.Ok(new ContactSyncResultDto(
+        Status: "created",
+        AccountKey: resolvedAccountKey,
+        DisplayName: dto.DisplayName,
+        Email: dto.Email,
+        Phone: dto.BusinessPhone ?? dto.MobilePhone ?? dto.HomePhone));
+});
 
-            Environment.ExitCode = 1;
-        }
-    }
+app.Run();
+
+static string ResolveAccountKey(string? accountKey)
+{
+    if (!string.IsNullOrWhiteSpace(accountKey))
+        return accountKey.Trim();
+
+    var fallback = Environment.GetEnvironmentVariable("EWS_ACCOUNT_KEY");
+    return string.IsNullOrWhiteSpace(fallback) ? "bewerbung" : fallback.Trim();
 }
+
+internal sealed record ContactSyncResultDto(
+    string Status,
+    string AccountKey,
+    string DisplayName,
+    string? Email,
+    string? Phone
+);

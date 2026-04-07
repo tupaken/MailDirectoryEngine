@@ -28,14 +28,7 @@ internal sealed record ContactDto(
     string? BusinessFax,
     string? MobilePhone,
     string? Notes
-)
-{
-    public ContactDto(string DisplayName, string Email)
-    {
-        this.DisplayName = DisplayName;
-        this.Email = Email;
-    }
-}
+);
 
 internal sealed record ContactPageDto(
     IReadOnlyList<ContactDto> Items,

@@ -6,8 +6,8 @@ This document describes the current behavior of all implemented methods in the p
 
 - `Program.Main(string[] args)`: Console entry point that creates one database client plus one IMAP engine per configured user key, continuously polls inbox and sent folders for each account, processes unseen messages, logs caught exceptions, and keeps running.
 - `Program.ComputeHash(string text)`: Returns the SHA-256 hash of `text` as an uppercase hexadecimal string.
-- `Program.InboxEMails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes inbox UIDs from newest to oldest until a known `(hash, account)` combination is found, then inserts unseen inbox messages in chronological order.
-- `Program.SentEmails(ImapEngine engine, DBClientAdapter db, IList<UniqueId> ids)`: Recursively processes sent-message UIDs from newest to oldest until a known `(hash, account)` combination is found, exports each unseen sent message as `.eml`, and stores the saved file path with hash/account metadata.
+- `Program.InboxEMails(ImapEngine engine, DBClientAdapter db, IImapFolder inbox, IList<UniqueId> ids)`: Recursively processes inbox UIDs from newest to oldest until a known `(hash, account)` combination is found, then inserts unseen inbox messages in chronological order.
+- `Program.SentEmails(ImapEngine engine, DBClientAdapter db, IImapFolder sent, IList<UniqueId> ids)`: Recursively processes sent-message UIDs from newest to oldest until a known `(hash, account)` combination is found, exports each unseen sent message as `.eml`, and stores the saved file path with hash/account metadata.
 
 ## `src/DB/IDBClient.cs`
 
@@ -19,10 +19,10 @@ This document describes the current behavior of all implemented methods in the p
 
 ## `src/DB/DBClientAdapter.cs`
 
-- `DBClientAdapter.DBClientAdapter()`: Loads `.env` from the repository root when present, builds an `NpgsqlConnection` for `localhost`, opens the database connection immediately, and keeps it available through `Connection`.
-- `DBClientAdapter.SetNewInboxMessage(string hash, string content, string account)`: Inserts `hash`, `content`, and `account` into `e_mails_inbox`.
+- `DBClientAdapter.DBClientAdapter()`: Loads `.env` from the repository root when present, builds an `NpgsqlConnection` using `POSTGRES_HOST` (fallback `localhost`), opens the database connection immediately, and keeps it available through `Connection`.
+- `DBClientAdapter.SetNewInboxMessage(string hash, string content, string account)`: Inserts `hash`, `content`, and `account` into `e_mails_inbox` and ignores duplicates on `(hash, account)`.
 - `DBClientAdapter.CheckHashInbox(string hash, string account)`: Executes `SELECT EXISTS` against `e_mails_inbox` filtered by `hash` and `account`.
-- `DBClientAdapter.SetNewSendMessage(string hash, string path, string account)`: Inserts `hash`, `path`, and `account` into `e_mails_send`.
+- `DBClientAdapter.SetNewSendMessage(string hash, string path, string account)`: Inserts `hash`, `path`, and `account` into `e_mails_send` and ignores duplicates on `(hash, account)`.
 - `DBClientAdapter.CheckHashSend(string hash, string account)`: Executes `SELECT EXISTS` against `e_mails_send` filtered by `hash` and `account`.
 - `DBClientAdapter.Dispose()`: Disposes the open PostgreSQL connection.
 
@@ -57,12 +57,12 @@ This document describes the current behavior of all implemented methods in the p
 - `ImapEngine.GetLastUID(IImapFolder fold)`: Returns the last UID in folder search results, or `null` when empty.
 - `ImapEngine.GetInbox(IImapClient client)`: Opens the inbox in read-only mode and returns it.
 - `ImapEngine.GetSent(IImapClient client)`: Locates the `Gesendete Elemente` folder below the personal root by name or matching full-name suffix, opens it in read-only mode, and throws when no matching sent folder exists.
-- `ImapEngine.SaveInboxMail(UniqueId uid)`: Exports an inbox message to `<savePath>/<uid>.eml` and returns the written file path.
-- `ImapEngine.SaveSentMail(UniqueId uid)`: Exports a sent message to `<savePath>/<uid>.eml` and returns the written file path.
+- `ImapEngine.SaveInboxMail(UniqueId uid)`: Exports an inbox message to `<savePath>/<uid>_<random6>.eml` and returns the written file path.
+- `ImapEngine.SaveSentMail(UniqueId uid)`: Exports a sent message to `<savePath>/<uid>_<random6>.eml` and returns the written file path.
 - `ImapEngine.UseClient<T>(Func<IImapClient, T> action)`: Executes `action` with a newly created IMAP client and guarantees disconnect/dispose in a `finally` block.
 - `ImapEngine.GetLatestMessage(IImapFolder folder)`: Loads the newest message from `folder` and returns it as `MessageDto`; returns an empty DTO when the folder has no messages.
 - `ImapEngine.CreateMessageDto(UniqueId uid, MimeMessage message)`: Maps a MimeKit message into a lightweight DTO using subject and HTML or text body.
-- `ImapEngine.SaveMail(IImapFolder folder, UniqueId uid)`: Writes the specified message to `<savePath>/<uid>.eml` and returns the full file path.
+- `ImapEngine.SaveMail(IImapFolder folder, UniqueId uid)`: Writes the specified message to `<savePath>/<uid>_<random6>.eml` and returns the full file path.
 - `ImapEngine.GetSaveDirectory()`: Resolves, normalizes, and creates the configured save directory, then returns the absolute path.
 - `ImapEngine.GetInboxMessage(UniqueId id)`: Opens the inbox, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
 - `ImapEngine.GetSentMessage(UniqueId id)`: Opens the resolved sent folder, loads the requested message by UID, returns it as `MessageDto`, and disconnects afterwards.
@@ -73,6 +73,7 @@ This document describes the current behavior of all implemented methods in the p
 - `DB/migrations/V1__init.sql`: Creates `e_mails_inbox` with `id`, `hash`, `content`, `operated`, and `deleted`.
 - `DB/migrations/V1__init.sql`: Creates `e_mails_send` with `id`, `hash`, `path`, `operated`, and `deleted`.
 - `DB/migrations/V2.sql`: Adds `account` column to both tables, backfills existing rows with `bewerbung`, and marks the new column as `NOT NULL`.
+- `DB/migrations/V3__fix_mail_indexes.sql`: Removes oversized uniqueness on `content` and aligns deduplication constraints to `UNIQUE(hash, account)` for inbox and sent tables.
 
 ## `src/Imap/MailKitImapClientAdapter.cs`
 

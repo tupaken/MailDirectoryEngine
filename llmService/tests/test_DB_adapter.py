@@ -5,9 +5,10 @@ These tests are pure unit tests:
 - no real .env file access
 - no real SQLAlchemy Session interaction
 
-The import helper supports both execution styles used in this repository:
-- running tests from repository root (`llm_service.DB.DBadapter`)
-- running tests from inside `llm_service` (`DB.DBadapter`)
+The import helper supports all execution styles used in this repository:
+- running tests from repository root (`llmService.DB.DBadapter`)
+- legacy package import path (`llm_service.DB.DBadapter`)
+- running tests from inside `llmService` (`DB.DBadapter`)
 """
 
 import importlib
@@ -20,13 +21,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 def _import_db_module():
     """Import DBadapter from whichever package root pytest uses."""
-    for module_name in ("llm_service.DB.DBadapter", "DB.DBadapter"):
+    for module_name in ("llmService.DB.DBadapter", "llm_service.DB.DBadapter", "DB.DBadapter"):
         try:
             return importlib.import_module(module_name)
         except ModuleNotFoundError:
             continue
     raise ModuleNotFoundError(
-        "Could not import DBadapter as 'llm_service.DB.DBadapter' or 'DB.DBadapter'."
+        "Could not import DBadapter as 'llmService.DB.DBadapter', "
+        "'llm_service.DB.DBadapter' or 'DB.DBadapter'."
     )
 
 
@@ -127,7 +129,7 @@ def _table_for_sent():
 def _table_for_mark_operated(condition="id-condition"):
     """Build a minimal table mock needed by ``mark_operated`` tests."""
     id_col = MagicMock()
-    id_col.is_.return_value = condition
+    id_col.__eq__.return_value = condition
     return SimpleNamespace(c=SimpleNamespace(id=id_col))
 
 
@@ -318,7 +320,7 @@ def test_mark_operated_updates_inbox_and_commits(monkeypatch):
 
     assert len(update_calls) == 1
     assert update_calls[0].table is adapter.inbox
-    adapter.inbox.c.id.is_.assert_called_once_with("abc")
+    adapter.inbox.c.id.__eq__.assert_called_once_with("abc")
     assert update_calls[0].where_condition == "id-condition"
     assert update_calls[0].values_payload == {"operated": True}
     session.execute.assert_called_once_with(update_calls[0])
@@ -345,7 +347,7 @@ def test_mark_operated_updates_sent_and_commits(monkeypatch):
 
     assert len(update_calls) == 1
     assert update_calls[0].table is adapter.sent
-    adapter.sent.c.id.is_.assert_called_once_with("xyz")
+    adapter.sent.c.id.__eq__.assert_called_once_with("xyz")
     assert update_calls[0].where_condition == "sent-id-condition"
     assert update_calls[0].values_payload == {"operated": True}
     session.execute.assert_called_once_with(update_calls[0])

@@ -1,35 +1,95 @@
 services:
-
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER:  ${POSTGRES_USER}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - ${POSTGRES_PATH}:/var/lib/postgresql/data
-    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   migrate:
     image: flyway/flyway
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     command: >
       -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       -user=${POSTGRES_USER}
       -password=${POSTGRES_PASSWORD}
       migrate
     volumes:
-    - ./DB/migrations:/flyway/sql
+      - ./DB/migrations:/flyway/sql
+    restart: "no"
+
+  contactservice:
+    build:
+      context: .
+      dockerfile: ContactService/Dockerfile
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_URLS: http://+:5000
+      EWS_ACCOUNT_KEY: ${EWS_ACCOUNT_KEY:-bewerbung}
+    ports:
+      - "5000:5000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  mailparsing:
+    build:
+      context: ./MailParsing
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      MAIL_SAVE_DIR: /mail-export
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./mail-export:/mail-export
+    restart: unless-stopped
+
+  llmservice:
+    build:
+      context: .
+      dockerfile: llmService/Dockerfile
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      LLM_ENDPOINT: http://ollama:11434
+      CONTACT_SERVICE_ENDPOINT: http://contactservice:5000/api/contacts/canonical
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      contactservice:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
 
   adminer:
     image: adminer
-    restart: always
+    restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   ollama:
     image: ollama/ollama:latest
@@ -39,11 +99,7 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     restart: unless-stopped
-    runtime: nvidia
-    gpus: all
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_MAX_LOADED_MODELS=1
       - OLLAMA_NUM_PARALLEL=1
