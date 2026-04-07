@@ -12,6 +12,8 @@ namespace MailDirectoryEngine.src
     /// </summary>
     internal class Program
     {
+        private const int DefaultInitialSyncLimit = 20;
+
         /// <summary>
         /// Reads the latest inbox and sent messages, deduplicates them by hash, and persists new entries.
         /// </summary>
@@ -76,9 +78,14 @@ namespace MailDirectoryEngine.src
             }
 
             var hashUS = engine.getAccountHash();
+            var initialSyncLimit = ResolveInitialSyncLimit();
+            var isInitialSync = !db.HasInboxRows(hashUS);
+            var minIndex = (isInitialSync && initialSyncLimit > 0)
+                ? Math.Max(0, Ids.Count - initialSyncLimit)
+                : 0;
             var pendingMessages = new List<(string Hash, string Content)>();
 
-            for (int i = Ids.Count - 1; i >= 0; i--)
+            for (int i = Ids.Count - 1; i >= minIndex; i--)
             {
                 var uid = Ids[i];
                 var content = engine.GetMessage(inbox, uid).Context;
@@ -114,9 +121,14 @@ namespace MailDirectoryEngine.src
             }
 
             var hashUS = engine.getAccountHash();
+            var initialSyncLimit = ResolveInitialSyncLimit();
+            var isInitialSync = !db.HasSentRows(hashUS);
+            var minIndex = (isInitialSync && initialSyncLimit > 0)
+                ? Math.Max(0, Ids.Count - initialSyncLimit)
+                : 0;
             var pendingMessages = new List<(UniqueId Uid, string Hash)>();
 
-            for (int i = Ids.Count - 1; i >= 0; i--)
+            for (int i = Ids.Count - 1; i >= minIndex; i--)
             {
                 var uid = Ids[i];
                 var content = engine.GetMessage(sent, uid).Context;
@@ -136,6 +148,23 @@ namespace MailDirectoryEngine.src
                 var savedPath = engine.SaveMessage(sent, pending.Uid);
                 db.SetNewSendMessage(pending.Hash, savedPath, hashUS);
             }
+        }
+
+        /// <summary>
+        /// Resolves how many messages should be processed during initial synchronization.
+        /// </summary>
+        /// <returns>
+        /// A positive limit value, or <see cref="DefaultInitialSyncLimit"/> when the environment value is missing/invalid.
+        /// </returns>
+        private static int ResolveInitialSyncLimit()
+        {
+            var envValue = Environment.GetEnvironmentVariable("INITIAL_SYNC_LIMIT");
+            if (int.TryParse(envValue, out var parsed) && parsed > 0)
+            {
+                return parsed;
+            }
+
+            return DefaultInitialSyncLimit;
         }
     }
 }
