@@ -1,18 +1,28 @@
-# llm_service
+# llmService
 
 Python worker for inbox post-processing:
 - reads unprocessed inbox rows from PostgreSQL (`e_mails_inbox.operated = false`)
 - converts HTML to plain text
 - sends text to a configurable local LLM backend (`ollama` or `llama.cpp`)
-- prints only validated `is_allowed = true` results
+- maps each valid result to one canonical JSON schema
+- enriches phone list from mail text labels (`Telefon`, `Telefax`, `Mobil`, etc.)
+- sends contacts to `ContactService` (`POST /api/contacts/canonical`)
+- marks inbox rows as `operated = true` only when:
+  - contact sync to `ContactService` succeeded, or
+  - LLM explicitly returned `is_allowed = false` (irrelevant mail)
+- leaves rows unmarked for unclear/failed decisions, so they are retried
 
 ## Classification Output
 
-- The worker calls `llm_connection(text)` for each inbox message.
-- `llm_connection` returns either:
-  - a normalized contact `dict` with `is_allowed = true`, or
-  - `None` (not printed) when the result is invalid or filtered out.
-- This means `{"is_allowed": false}` objects are intentionally not printed.
+- The worker calls `llm_connection_with_disposition(text)` for each inbox message.
+- The decision payload contains:
+  - `contacts`: a list of normalized contact dictionaries,
+  - `disposition`: one of `relevant`, `irrelevant`, `unknown`.
+- Marking behavior:
+  - `relevant` + successful sync -> row is marked operated.
+  - `irrelevant` (`is_allowed = false`) -> row is marked operated.
+  - `unknown` or sync error -> row stays unmarked and is retried.
+- Every synced contact is mapped to the shared canonical schema (`schema_version = "1.0"`) and posted to `ContactService`.
 
 ### Validation Rules (post-processing)
 
@@ -54,6 +64,12 @@ Optional LLM variables:
 - `LLM_MODEL` (default `llama3.2:1b`)
 - `LLM_TIMEOUT_SECONDS` (default `120`)
 
+Contact sync variables:
+- `CONTACT_SERVICE_ENDPOINT` (default `http://localhost:5000/api/contacts/canonical`)
+- `CONTACT_SERVICE_TIMEOUT_SECONDS` (default `30`)
+- `CONTACT_SERVICE_API_KEY` (optional, forwarded as `X-Api-Key`)
+- `EWS_ACCOUNT_KEY` (default `bewerbung`, forwarded in canonical payload as `account_key`)
+
 Optional Ollama runtime variables (used by Docker Compose):
 - `OLLAMA_MODEL` (auto-pulled model, default `llama3.2:1b`)
 - `OLLAMA_KEEP_ALIVE` (default `30m`)
@@ -93,7 +109,7 @@ $env:LLM_MODEL="llama3.2:1b"
 From repository root:
 
 ```powershell
-cd C:\Users\Praktikant\Desktop\MailDirectoryEngine\llm_service
+cd C:\Users\Praktikant\Desktop\MailDirectoryEngine\llmService
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -e .
@@ -104,23 +120,36 @@ pip install -e .
 From repository root:
 
 ```powershell
-python -m llm_service.main
+dotnet run --project .\ContactService\ContactsService.csproj
+```
+
+In another shell:
+
+```powershell
+python -m llmService.main
+```
+
+Run with Docker Compose (recommended for full pipeline):
+
+```powershell
+docker compose up -d --build
+docker compose logs -f llmservice contactservice mailparsing
 ```
 
 ## Tests
 
-Unit tests are in `llm_service/tests` and do not require a running database or Ollama server.
+Unit tests are in `llmService/tests` and do not require a running database or Ollama server.
 
 ```powershell
 cd C:\Users\Praktikant\Desktop\MailDirectoryEngine
-uv --project llm_service run pytest llm_service/tests -q
+uv --project llmService run pytest llmService/tests -q
 ```
 
 Run only `DB_adapter` tests:
 
 ```powershell
 cd C:\Users\Praktikant\Desktop\MailDirectoryEngine
-uv --project llm_service run pytest llm_service/tests/test_DB_adapter.py -q
+uv --project llmService run pytest llmService/tests/test_DB_adapter.py -q
 ```
 
 `test_DB_adapter.py` covers:

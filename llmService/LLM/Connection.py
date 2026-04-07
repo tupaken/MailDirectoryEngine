@@ -8,7 +8,7 @@ from urllib import error, request
 from dotenv import load_dotenv
 from ollama import Client
 
-from .json_parser import parse_llm_json
+from .json_parser import parse_first_llm_json, parse_llm_json
 from .normalization import (
     _dedupe_contacts,
     _extract_contacts,
@@ -19,6 +19,10 @@ from .promtInbox import PROMPT_TEMPLATE
 
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=ENV_PATH if ENV_PATH.exists() else None)
+
+DISPOSITION_RELEVANT = "relevant"
+DISPOSITION_IRRELEVANT = "irrelevant"
+DISPOSITION_UNKNOWN = "unknown"
 
 
 def _build_prompt(mail: str) -> str:
@@ -99,30 +103,56 @@ def _normalize_llm_contacts(parsed: dict, mail: str) -> list[dict]:
     return _dedupe_contacts(results)
 
 
-def llm_connection(mail: str) -> dict | list[dict] | None:
-    """Send one mail text to configured LLM backend and return allowed result(s)."""
+def _generate_raw_response(mail: str) -> str:
+    """Generate one raw model response for the provided mail text."""
 
     prompt = _build_prompt(mail)
     backend = os.getenv("LLM_BACKEND", "ollama").strip().lower().replace("-", "_")
 
     if backend == "ollama":
-        raw_response = _ollama_generate(prompt)
-    elif backend in {"llama_cpp", "llama.cpp", "llamacpp"}:
-        raw_response = _llamacpp_generate(prompt)
-    else:
-        raise ValueError(
-            "Unsupported LLM_BACKEND. Use one of: ollama, llama_cpp, llama.cpp, llamacpp."
-        )
+        return _ollama_generate(prompt)
+    if backend in {"llama_cpp", "llama.cpp", "llamacpp"}:
+        return _llamacpp_generate(prompt)
 
-    parsed: dict = {}
+    raise ValueError(
+        "Unsupported LLM_BACKEND. Use one of: ollama, llama_cpp, llama.cpp, llamacpp."
+    )
+
+
+def llm_connection_with_disposition(mail: str) -> dict:
+    """Return contacts plus disposition for downstream operated-flag decisions."""
+
+    raw_response = _generate_raw_response(mail)
+    parsed_any = parse_first_llm_json(raw_response)
+
+    parsed_allowed: dict = {}
     try:
-        parsed = parse_llm_json(raw_response)
+        parsed_allowed = parse_llm_json(raw_response)
     except RuntimeError:
-        parsed = {}
+        parsed_allowed = {}
 
-    normalized_contacts = _normalize_llm_contacts(parsed, mail)
+    normalized_contacts = _normalize_llm_contacts(parsed_allowed, mail)
     list_contacts = _extract_structured_contacts_from_mail(mail)
     contacts = _dedupe_contacts(normalized_contacts + list_contacts)
+
+    if contacts:
+        disposition = DISPOSITION_RELEVANT
+    elif isinstance(parsed_any, dict) and parsed_any.get("is_allowed") is False:
+        disposition = DISPOSITION_IRRELEVANT
+    else:
+        disposition = DISPOSITION_UNKNOWN
+
+    return {
+        "contacts": contacts,
+        "disposition": disposition,
+    }
+
+
+def llm_connection(mail: str) -> dict | list[dict] | None:
+    """Send one mail text to configured LLM backend and return allowed result(s)."""
+
+    decision = llm_connection_with_disposition(mail)
+    contacts = decision.get("contacts", [])
 
     if not contacts:
         return None

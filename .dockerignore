@@ -1,0 +1,12 @@
+.git
+.gitignore
+.vscode
+.dotnet
+db-data
+mail-export
+**/bin
+**/obj
+**/.venv
+**/.pytest_cache
+.env
+*.log

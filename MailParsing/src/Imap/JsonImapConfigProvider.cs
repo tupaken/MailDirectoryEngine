@@ -56,9 +56,10 @@ namespace MailDirectoryEngine.src.Imap
         public string GetSavePath()
         {
             var settings = ConfigLoader.Load(_path);
+            var envPath = Environment.GetEnvironmentVariable("MAIL_SAVE_DIR");
 
-            var rawPath = string.IsNullOrWhiteSpace(settings.SavePath)
-                ? Environment.GetEnvironmentVariable("MAIL_SAVE_DIR")
+            var rawPath = !string.IsNullOrWhiteSpace(envPath)
+                ? envPath
                 : settings.SavePath;
 
             if (string.IsNullOrWhiteSpace(rawPath))

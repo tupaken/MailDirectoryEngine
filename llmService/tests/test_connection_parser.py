@@ -5,6 +5,7 @@ import pytest
 from llmService.LLM.Connection import (
     _extract_structured_contacts_from_mail,
     _normalize_llm_result,
+    parse_first_llm_json,
     parse_llm_json,
 )
 
@@ -265,3 +266,17 @@ def test_parse_llm_json_keeps_keyword_words_inside_string_values():
     parsed = parse_llm_json(raw)
     assert parsed["is_allowed"] is True
     assert parsed["company"] == "None GmbH"
+
+
+def test_parse_first_llm_json_returns_false_object():
+    raw = """
+```json
+{"is_allowed": false, "reason": "newsletter"}
+```
+"""
+    parsed = parse_first_llm_json(raw)
+    assert parsed == {"is_allowed": False, "reason": "newsletter"}
+
+
+def test_parse_first_llm_json_returns_none_for_non_json_text():
+    assert parse_first_llm_json("plain output without braces") is None

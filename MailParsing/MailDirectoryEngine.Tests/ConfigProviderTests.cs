@@ -236,7 +236,7 @@ public class ConfigProviderTests
     }
 
     /// <summary>
-    /// Verifies that the configured save path is returned from JSON settings.
+    /// Verifies that the configured save path is returned from JSON settings when no env override is present.
     /// </summary>
     [Fact]
     public void JsonImapConfigProvider_GetSavePath_ReturnsConfiguredPath()
@@ -270,6 +270,52 @@ public class ConfigProviderTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that MAIL_SAVE_DIR overrides JSON save path when both are set.
+    /// </summary>
+    [Fact]
+    public void JsonImapConfigProvider_GetSavePath_UsesEnvironmentOverride_WhenJsonAlsoProvidesPath()
+    {
+        var configuredPath = Path.Combine(Path.GetTempPath(), "mail-export-json");
+        var envPath = Path.Combine(Path.GetTempPath(), "mail-export-env-override");
+        var escapedPath = configuredPath.Replace("\\", "\\\\");
+        var json = $$"""
+        {
+          "accounts": {
+            "test": {
+              "host": "imap.example.test",
+              "port": 993,
+              "user": "user",
+              "password": "pass"
+            }
+          },
+          "savePath": "{{escapedPath}}"
+        }
+        """;
+
+        lock (EnvLock)
+        {
+            var original = Environment.GetEnvironmentVariable("MAIL_SAVE_DIR");
+            var path = Path.GetTempFileName();
+
+            try
+            {
+                Environment.SetEnvironmentVariable("MAIL_SAVE_DIR", envPath);
+                File.WriteAllText(path, json);
+                var provider = new JsonImapConfigProvider(path);
+
+                var resolved = provider.GetSavePath();
+
+                Assert.Equal(Path.GetFullPath(envPath), resolved);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MAIL_SAVE_DIR", original);
+                File.Delete(path);
+            }
         }
     }
 

@@ -6,7 +6,7 @@ A quick command reference for build, run, tests, and database migration.
 
 - API reference (English): `MailParsing/docs/API.md`
 - Runtime configuration overview: see `MailParsing/src/Imap/Imap_config.json`
-- Python worker documentation: `llm_service/README.md`
+- Python worker documentation: `llmService/README.md`
 
 ## Prerequisites
 
@@ -53,6 +53,65 @@ Notes:
 - Database credentials are loaded from `.env`.
 - The current `Main` implementation runs in a continuous polling loop and retries after logged exceptions without exiting.
 
+## Run ContactService API
+
+```powershell
+dotnet run --project .\ContactService\ContactsService.csproj
+```
+
+Notes:
+- Health endpoint: `GET http://localhost:5000/health`
+- Canonical contact ingest endpoint: `POST http://localhost:5000/api/contacts/canonical`
+- Optional list endpoint: `GET http://localhost:5000/api/contacts?pageSize=100`
+
+Canonical ingest payload example:
+
+```json
+{
+  "schema_version": "1.0",
+  "account_key": "bewerbung",
+  "source_message_id": "12345",
+  "contact": {
+    "full_name": "Max Mustermann",
+    "company": "Muster GmbH",
+    "email": "max@muster.de",
+    "phones": [
+      { "type": "business", "raw": "+49 30 123456", "e164": "+4930123456" },
+      { "type": "fax", "raw": "+49 30 123457", "e164": "+4930123457" }
+    ],
+    "address": "Musterstrasse 1, Berlin",
+    "website": "muster.de"
+  }
+}
+```
+
+## Run Full Stack With Docker Compose
+
+Start all services (PostgreSQL, migration, MailParsing, ContactService, llmService, Adminer, Ollama):
+
+```powershell
+docker compose up -d --build
+```
+
+Watch logs:
+
+```powershell
+docker compose logs -f mailparsing llmservice contactservice
+```
+
+Stop everything:
+
+```powershell
+docker compose down
+```
+
+Notes:
+- Inside Compose, service-to-service URLs are preconfigured:
+  - PostgreSQL host: `postgres`
+  - Contact API: `http://contactservice:5000/api/contacts/canonical`
+  - Ollama: `http://ollama:11434`
+- Mail exports are written to `./mail-export` on the host.
+
 ## IMAP Configuration
 
 The engine expects a JSON file at `MailParsing/src/Imap/Imap_config.json` with named accounts plus a default export directory.
@@ -86,6 +145,7 @@ The repository uses PostgreSQL plus Flyway via `docker-compose.yml`.
 - SQL migration files live in `DB/migrations`.
 - `e_mails_inbox` stores inbox message hashes, message content, and an `account` scope value.
 - `e_mails_send` stores sent message hashes, exported `path`, and an `account` scope value.
+- Current deduplication constraints are account-scoped: `UNIQUE(hash, account)` on both tables.
 
 Start the database:
 
@@ -130,7 +190,7 @@ The console entry point in `MailParsing/src/main.cs` currently does the followin
 2. For each engine, loads all inbox UIDs and recursively walks from newest to oldest until an already known `(hash, account)` combination is found.
 3. Inserts each unseen inbox message body into `e_mails_inbox` in chronological order with the current account value.
 4. Loads all sent-message UIDs and recursively walks from newest to oldest until an already known `(hash, account)` combination is found.
-5. Exports each unseen sent message to `<savePath>/<uid>.eml` and stores the hash, path, and account in `e_mails_send`.
+5. Exports each unseen sent message to `<savePath>/<uid>_<random6>.eml` and stores the hash, path, and account in `e_mails_send`.
 6. Logs exceptions to the console and immediately continues with the next loop iteration.
 
 ## Run tests
@@ -189,7 +249,7 @@ docker run --rm maildirectoryengine:local
 
 ## LLM Runtime (Ollama / llama.cpp)
 
-The Python worker (`llm_service`) reads these root `.env` variables:
+The Python worker (`llmService`) reads these root `.env` variables:
 - `LLM_BACKEND` (`ollama` or `llama_cpp`)
 - `LLM_ENDPOINT`
 - `LLM_MODEL`

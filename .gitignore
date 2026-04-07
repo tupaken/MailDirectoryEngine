@@ -14,6 +14,8 @@ db-data/
 **/db-data/
 postgres-data/
 **/postgres-data/
+mail-export/
+**/mail-export/
 
 # Local Docker compose overrides
 docker-compose.override.yml
@@ -28,3 +30,7 @@ Thumbs.db
 
 # Local .NET CLI state
 .dotnet/
+
+# .NET build outputs
+**/bin/
+**/obj/

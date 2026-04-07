@@ -30,7 +30,7 @@ namespace MailDirectoryEngine.src.DB
             }
 
             var ConnectionString = new NpgsqlConnectionStringBuilder{
-                Host = "localhost", 
+                Host = Environment.GetEnvironmentVariable("POSTGRES_HOST") ?? "localhost",
                 Port = int.Parse(Environment.GetEnvironmentVariable("POSTGRES_PORT") ?? "5432"),
                 Database = Environment.GetEnvironmentVariable("POSTGRES_DB"),
                 Username = Environment.GetEnvironmentVariable("POSTGRES_USER"),
@@ -50,7 +50,9 @@ namespace MailDirectoryEngine.src.DB
         public void SetNewInboxMessage(string hash, string content,string account)
         {
             using var cmd = new NpgsqlCommand(
-                $"INSERT INTO {inbox}(hash,content,account) VALUES (@hash, @content, @account);", Connection);
+                $"INSERT INTO {inbox}(hash,content,account) VALUES (@hash, @content, @account) " +
+                $"ON CONFLICT (hash, account) DO NOTHING;",
+                Connection);
             cmd.Parameters.AddWithValue("@hash", hash);
             cmd.Parameters.AddWithValue("@content", content);
             cmd.Parameters.AddWithValue("@account",account);
@@ -88,8 +90,9 @@ namespace MailDirectoryEngine.src.DB
         public void SetNewSendMessage(string hash, string path, string account)
         {
             using var cmd = new NpgsqlCommand(
-                $"INSERT INTO {send}(hash,path,account) VALUES (@hash, @path, @account);",
-            Connection);
+                $"INSERT INTO {send}(hash,path,account) VALUES (@hash, @path, @account) " +
+                $"ON CONFLICT (hash, account) DO NOTHING;",
+                Connection);
             cmd.Parameters.AddWithValue("@hash",hash);
             cmd.Parameters.AddWithValue("@path",path);
             cmd.Parameters.AddWithValue("@account",account);

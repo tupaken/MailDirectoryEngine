@@ -179,3 +179,35 @@ def parse_llm_json(raw: str) -> dict:
                 return parsed
 
     raise RuntimeError(f"Could not parse JSON object from LLM output:\n{raw}")
+
+
+def parse_first_llm_json(raw: str) -> dict | None:
+    """Parse and return the first JSON object found in LLM output (if any)."""
+
+    if not raw or raw.strip() == "":
+        return None
+
+    cleaned = _strip_markdown_fences(raw.strip())
+    candidate_texts = [cleaned]
+
+    try:
+        unwrapped = json.loads(cleaned)
+        if isinstance(unwrapped, str):
+            candidate_texts.append(unwrapped)
+    except json.JSONDecodeError:
+        pass
+
+    for candidate_text in candidate_texts:
+        object_candidates = _extract_json_object_candidates(candidate_text)
+        if not object_candidates:
+            parsed = _load_json_object(candidate_text)
+            if parsed is not None:
+                return parsed
+            continue
+
+        for obj in object_candidates:
+            parsed = _load_json_object(obj)
+            if parsed is not None:
+                return parsed
+
+    return None

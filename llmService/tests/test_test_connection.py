@@ -4,16 +4,19 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from llmService.LLM.Connection import test_connection as run_llm_connection
+from llmService.LLM.Connection import (
+    llm_connection_with_disposition,
+    test_connection as run_llm_connection,
+)
 
 
 class TestConnectionTests(unittest.TestCase):
     """Ensure backend selection and parsing/normalization flow works."""
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("llm_service.LLM.Connection._normalize_llm_result")
-    @patch("llm_service.LLM.Connection.parse_llm_json")
-    @patch("llm_service.LLM.Connection.Client")
+    @patch("llmService.LLM.Connection._normalize_llm_result")
+    @patch("llmService.LLM.Connection.parse_llm_json")
+    @patch("llmService.LLM.Connection.Client")
     def test_test_connection_calls_ollama_backend(
         self,
         client_cls,
@@ -49,9 +52,9 @@ class TestConnectionTests(unittest.TestCase):
         },
         clear=True,
     )
-    @patch("llm_service.LLM.Connection._normalize_llm_result")
-    @patch("llm_service.LLM.Connection.parse_llm_json")
-    @patch("llm_service.LLM.Connection.request.urlopen")
+    @patch("llmService.LLM.Connection._normalize_llm_result")
+    @patch("llmService.LLM.Connection.parse_llm_json")
+    @patch("llmService.LLM.Connection.request.urlopen")
     def test_test_connection_calls_llamacpp_backend(
         self,
         urlopen_mock,
@@ -87,8 +90,8 @@ class TestConnectionTests(unittest.TestCase):
             run_llm_connection("Any Mail")
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("llm_service.LLM.Connection.parse_llm_json", side_effect=RuntimeError("bad output"))
-    @patch("llm_service.LLM.Connection.Client")
+    @patch("llmService.LLM.Connection.parse_llm_json", side_effect=RuntimeError("bad output"))
+    @patch("llmService.LLM.Connection.Client")
     def test_test_connection_returns_none_when_parser_fails(self, client_cls, _parse_mock):
         """Parser failures should be treated as filtered/invalid output."""
 
@@ -100,8 +103,8 @@ class TestConnectionTests(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("llm_service.LLM.Connection.parse_llm_json", side_effect=RuntimeError("bad output"))
-    @patch("llm_service.LLM.Connection.Client")
+    @patch("llmService.LLM.Connection.parse_llm_json", side_effect=RuntimeError("bad output"))
+    @patch("llmService.LLM.Connection.Client")
     def test_test_connection_extracts_all_structured_contacts_when_parser_fails(
         self, client_cls, _parse_mock
     ):
@@ -120,6 +123,36 @@ Astera Technik - Leon Hartmann; +999 351 5558800; service@astera-technik.de
         self.assertIsInstance(result, list)
         self.assertEqual(2, len(result))
         self.assertEqual(["Nina Becker", "Leon Hartmann"], [item["full_name"] for item in result])
+
+    @patch("llmService.LLM.Connection._generate_raw_response", return_value='{"is_allowed": false}')
+    @patch("llmService.LLM.Connection.parse_first_llm_json", return_value={"is_allowed": False})
+    @patch("llmService.LLM.Connection.parse_llm_json", side_effect=RuntimeError("bad output"))
+    @patch("llmService.LLM.Connection._extract_structured_contacts_from_mail", return_value=[])
+    def test_llm_connection_with_disposition_sets_irrelevant_when_explicit_false(
+        self,
+        _extract_structured_mock,
+        _parse_allowed_mock,
+        _parse_any_mock,
+        _raw_mock,
+    ):
+        decision = llm_connection_with_disposition("mail")
+        self.assertEqual("irrelevant", decision["disposition"])
+        self.assertEqual([], decision["contacts"])
+
+    @patch("llmService.LLM.Connection._generate_raw_response", return_value="no json")
+    @patch("llmService.LLM.Connection.parse_first_llm_json", return_value=None)
+    @patch("llmService.LLM.Connection.parse_llm_json", side_effect=RuntimeError("bad output"))
+    @patch("llmService.LLM.Connection._extract_structured_contacts_from_mail", return_value=[])
+    def test_llm_connection_with_disposition_sets_unknown_when_no_clear_signal(
+        self,
+        _extract_structured_mock,
+        _parse_allowed_mock,
+        _parse_any_mock,
+        _raw_mock,
+    ):
+        decision = llm_connection_with_disposition("mail")
+        self.assertEqual("unknown", decision["disposition"])
+        self.assertEqual([], decision["contacts"])
 
 
 if __name__ == "__main__":

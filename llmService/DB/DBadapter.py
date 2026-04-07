@@ -107,7 +107,7 @@ class DB_adapter:
         else:
             raise ValueError(f"Unknown messageDirection: {messageDirection}")
 
-        stmt = update(table).where(table.c.id.is_(id)).values(operated=True)
+        stmt = update(table).where(table.c.id == id).values(operated=True)
 
         with Session(self.db) as sessioin:
             sessioin.execute(stmt)
