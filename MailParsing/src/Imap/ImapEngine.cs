@@ -24,7 +24,9 @@ namespace MailDirectoryEngine.src.Imap
         public ImapEngine(string accountKey, string Hash)
             : this(
                 new ImapService(),
-                new JsonImapConfigProvider(Path.Combine(AppContext.BaseDirectory, "src", "Imap", "Imap_config.json")),
+                new JsonImapConfigProvider(
+                    Environment.GetEnvironmentVariable("IMAP_CONFIG_PATH")
+                    ?? Path.Combine(AppContext.BaseDirectory, "src", "Imap", "Imap_config.json")),
                 accountKey,Hash)
         {
         }

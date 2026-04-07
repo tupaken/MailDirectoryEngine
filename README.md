@@ -5,7 +5,7 @@ A quick command reference for build, run, tests, and database migration.
 ## Documentation
 
 - API reference (English): `MailParsing/docs/API.md`
-- Runtime configuration overview: see `MailParsing/src/Imap/Imap_config.json`
+- Runtime configuration overview: see `MailParsing/src/Imap/Imap_config.example.json`
 - Python worker documentation: `llmService/README.md`
 
 ## Prerequisites
@@ -49,7 +49,7 @@ dotnet run --project .\MailParsing\MailDirectoryEngine.csproj
 ```
 
 Notes:
-- The app reads IMAP configuration from `MailParsing/src/Imap/Imap_config.json`.
+- The app reads IMAP configuration from `MailParsing/src/Imap/Imap_config.json` when present, otherwise from `IMAP__<ACCOUNT_KEY>__*` environment variables.
 - Database credentials are loaded from `.env`.
 - The current `Main` implementation runs in a continuous polling loop and retries after logged exceptions without exiting.
 
@@ -114,7 +114,15 @@ Notes:
 
 ## IMAP Configuration
 
-The engine expects a JSON file at `MailParsing/src/Imap/Imap_config.json` with named accounts plus a default export directory.
+You can configure IMAP in two ways:
+- JSON file at `MailParsing/src/Imap/Imap_config.json` (template: `MailParsing/src/Imap/Imap_config.example.json`)
+- Environment variables for each account key:
+  - `IMAP__<ACCOUNT_KEY>__HOST`
+  - `IMAP__<ACCOUNT_KEY>__PORT`
+  - `IMAP__<ACCOUNT_KEY>__USER`
+  - `IMAP__<ACCOUNT_KEY>__PASSWORD`
+
+`savePath` can still come from JSON, while `MAIL_SAVE_DIR` or `IMAP_SAVE_PATH` override it at runtime.
 
 Example:
 
@@ -134,7 +142,7 @@ Example:
 
 Notes:
 - `accounts` is a dictionary. The current production default key is `bewerbung`.
-- `savePath` is used for `.eml` exports. If it is empty, `MAIL_SAVE_DIR` is used as a fallback.
+- `savePath` is used for `.eml` exports. If it is empty, `MAIL_SAVE_DIR` (or `IMAP_SAVE_PATH`) is used as a fallback.
 - Keep real credentials out of committed example files when possible.
 
 ## Database and Migrations

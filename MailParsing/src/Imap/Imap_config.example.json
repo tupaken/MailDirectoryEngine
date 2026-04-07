@@ -1,0 +1,11 @@
+{
+  "accounts": {
+    "bewerbung": {
+      "host": "imap.example.test",
+      "port": 993,
+      "user": "user@example.test",
+      "password": "replace-me"
+    }
+  },
+  "savePath": "/mail-export"
+}
