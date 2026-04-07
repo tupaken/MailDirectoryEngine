@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="src\Imap\Imap_config.json">
+    <Content Include="src\Imap\Imap_config.json" Condition="Exists('src/Imap/Imap_config.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
