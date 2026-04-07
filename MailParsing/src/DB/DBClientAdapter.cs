@@ -115,5 +115,33 @@ namespace MailDirectoryEngine.src.DB
             return (bool)cmd.ExecuteScalar();
         }
 
+        /// <summary>
+        /// Checks whether inbox data already exists for the provided account.
+        /// </summary>
+        /// <param name="account">Account scope identifier used for the lookup.</param>
+        /// <returns><c>true</c> when at least one inbox row exists; otherwise <c>false</c>.</returns>
+        public bool HasInboxRows(string account)
+        {
+            using var cmd = new NpgsqlCommand(
+                $"SELECT EXISTS (SELECT 1 FROM {inbox} WHERE account = @account);",
+                Connection);
+            cmd.Parameters.AddWithValue("@account", account);
+            return (bool)cmd.ExecuteScalar();
+        }
+
+        /// <summary>
+        /// Checks whether sent data already exists for the provided account.
+        /// </summary>
+        /// <param name="account">Account scope identifier used for the lookup.</param>
+        /// <returns><c>true</c> when at least one sent row exists; otherwise <c>false</c>.</returns>
+        public bool HasSentRows(string account)
+        {
+            using var cmd = new NpgsqlCommand(
+                $"SELECT EXISTS (SELECT 1 FROM {send} WHERE account = @account);",
+                Connection);
+            cmd.Parameters.AddWithValue("@account", account);
+            return (bool)cmd.ExecuteScalar();
+        }
+
     }
 }
