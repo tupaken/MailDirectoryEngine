@@ -42,6 +42,41 @@ BUSINESS_LINE_HINTS = (
     "hrb",
     "ust",
 )
+GENERIC_EMAIL_LOCALPART_TOKENS = {
+    "info",
+    "kontakt",
+    "contact",
+    "office",
+    "mail",
+    "hello",
+    "team",
+    "support",
+    "service",
+    "sales",
+    "vertrieb",
+    "einkauf",
+    "jobs",
+    "job",
+    "bewerbung",
+    "bewerbungen",
+    "karriere",
+    "career",
+    "hr",
+    "admin",
+    "postmaster",
+    "noreply",
+    "no",
+    "reply",
+    "datenschutz",
+    "privacy",
+    "billing",
+    "invoice",
+    "buchhaltung",
+    "accounting",
+    "marketing",
+    "presse",
+    "press",
+}
 
 
 def _clean_text(value: object) -> str:
@@ -88,6 +123,29 @@ def _ascii_fold(value: str) -> str:
     return folded.casefold()
 
 
+def _contains_business_hint(value: str) -> bool:
+    """Check text for business/legal marker words while avoiding substring false hits."""
+
+    folded_value = _ascii_fold(f" {value} ")
+
+    for hint in BUSINESS_LINE_HINTS:
+        folded_hint = _ascii_fold(str(hint)).strip()
+        if not folded_hint:
+            continue
+
+        alnum_len = len(re.sub(r"[^a-z0-9]", "", folded_hint))
+        if alnum_len <= 3:
+            pattern = rf"(?<![a-z0-9]){re.escape(folded_hint)}(?![a-z0-9])"
+            if re.search(pattern, folded_value):
+                return True
+            continue
+
+        if folded_hint in folded_value:
+            return True
+
+    return False
+
+
 def _is_role_based_name(name: str, mail: str) -> bool:
     """Detect names that only appear in management-role context."""
 
@@ -132,8 +190,7 @@ def _looks_like_person_name_line(line: str) -> bool:
     if any(ch.isdigit() for ch in candidate):
         return False
 
-    folded = _ascii_fold(f" {candidate} ")
-    if any(hint in folded for hint in BUSINESS_LINE_HINTS):
+    if _contains_business_hint(candidate):
         return False
 
     return bool(NAME_RE.fullmatch(candidate) or NAME_RE_ALL_CAPS.fullmatch(candidate))
@@ -143,6 +200,36 @@ def _phone_digits(value: str) -> str:
     """Return only digit characters from one phone-like value."""
 
     return re.sub(r"\D", "", value or "")
+
+
+def _extract_name_from_email_address(email: str) -> str:
+    """Derive a person-like name from an email local-part when possible."""
+
+    cleaned = _clean_text(email)
+    match = EMAIL_RE.search(cleaned)
+    if not match:
+        return ""
+
+    local_part = match.group(0).split("@", 1)[0].split("+", 1)[0].casefold()
+    if not local_part:
+        return ""
+
+    tokens: list[str] = []
+    for raw_token in re.split(r"[._-]+", local_part):
+        token = re.sub(r"[^A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df]", "", raw_token)
+        if len(token) < 2:
+            continue
+        if token in GENERIC_EMAIL_LOCALPART_TOKENS:
+            continue
+        tokens.append(token)
+
+    if len(tokens) < 2:
+        return ""
+
+    candidate = " ".join(part[:1].upper() + part[1:] for part in tokens[:3])
+    if not _looks_like_person_name_line(candidate):
+        return ""
+    return candidate
 
 
 def _extract_name_from_phone_line(line: str) -> str:
@@ -265,6 +352,18 @@ def _extract_name_from_mail(mail: str, phone: str = "") -> str:
                 continue
             return candidate
 
+        # Fallback: derive a name from nearby email local-parts.
+        window_start = max(0, phone_idx - 4)
+        window_end = min(len(lines), phone_idx + 5)
+        for line_idx in range(window_start, window_end):
+            for email_match in EMAIL_RE.finditer(lines[line_idx]):
+                candidate = _extract_name_from_email_address(email_match.group(0))
+                if not candidate:
+                    continue
+                if _is_role_based_name(candidate, mail):
+                    continue
+                return candidate
+
     if labeled_candidates:
         return labeled_candidates[0][1]
 
@@ -279,6 +378,16 @@ def _extract_name_from_mail(mail: str, phone: str = "") -> str:
         for line_idx in range(signoff_idx + 1, end):
             candidate = lines[line_idx].strip(" ,;:-")
             if not _looks_like_person_name_line(candidate):
+                continue
+            if _is_role_based_name(candidate, mail):
+                continue
+            return candidate
+
+    # Last resort: derive from any email in the message.
+    for line in lines:
+        for email_match in EMAIL_RE.finditer(line):
+            candidate = _extract_name_from_email_address(email_match.group(0))
+            if not candidate:
                 continue
             if _is_role_based_name(candidate, mail):
                 continue

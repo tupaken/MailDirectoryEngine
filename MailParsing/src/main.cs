@@ -13,6 +13,7 @@ namespace MailDirectoryEngine.src
     internal class Program
     {
         private const int DefaultInitialSyncLimit = 20;
+        private const int DefaultPollIntervalSeconds = 30;
 
         /// <summary>
         /// Reads the latest inbox and sent messages, deduplicates them by hash, and persists new entries.
@@ -44,9 +45,11 @@ namespace MailDirectoryEngine.src
                         });
                     }catch(Exception ex)
                     {
-                    Console.WriteLine("Fehler: " + ex.Message);   
+                    Console.WriteLine("Fehler: " + BuildErrorMessage(ex));   
                     }
                 }
+
+                Thread.Sleep(TimeSpan.FromSeconds(ResolvePollIntervalSeconds()));
             }
         }
 
@@ -165,6 +168,44 @@ namespace MailDirectoryEngine.src
             }
 
             return DefaultInitialSyncLimit;
+        }
+
+        /// <summary>
+        /// Resolves polling interval seconds for the endless processing loop.
+        /// </summary>
+        /// <returns>
+        /// A positive interval in seconds, or <see cref="DefaultPollIntervalSeconds"/> when missing/invalid.
+        /// </returns>
+        private static int ResolvePollIntervalSeconds()
+        {
+            var envValue = Environment.GetEnvironmentVariable("POLL_INTERVAL_SECONDS");
+            if (int.TryParse(envValue, out var parsed) && parsed > 0)
+            {
+                return parsed;
+            }
+
+            return DefaultPollIntervalSeconds;
+        }
+
+        /// <summary>
+        /// Creates one compact error message that also includes the innermost root cause.
+        /// </summary>
+        /// <param name="ex">Exception to format.</param>
+        /// <returns>Combined top-level and root-cause message.</returns>
+        private static string BuildErrorMessage(Exception ex)
+        {
+            if (ex.InnerException is null)
+            {
+                return ex.Message;
+            }
+
+            var root = ex;
+            while (root.InnerException is not null)
+            {
+                root = root.InnerException;
+            }
+
+            return $"{ex.Message} | Root cause: {root.Message}";
         }
     }
 }
