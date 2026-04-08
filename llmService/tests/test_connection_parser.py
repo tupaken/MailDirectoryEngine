@@ -35,6 +35,13 @@ def test_parse_llm_json_handles_python_literal_output():
     assert parsed["company"] == "Company Inc."
 
 
+def test_parse_llm_json_coerces_string_boolean_true():
+    raw = '{"is_allowed": "true", "company": "Company Inc."}'
+    parsed = parse_llm_json(raw)
+    assert parsed["is_allowed"] is True
+    assert parsed["company"] == "Company Inc."
+
+
 def test_parse_llm_json_raises_when_no_allowed_json_object():
     with pytest.raises(RuntimeError, match="Could not parse JSON object"):
         parse_llm_json('{"is_allowed": false}')
@@ -220,6 +227,41 @@ Acme Co
     assert result["full_name"] == "Bob Schmidt"
 
 
+def test_normalize_result_infers_name_from_email_localpart_when_phone_present():
+    parsed = {
+        "is_allowed": True,
+        "full_name": "",
+        "company": "Acme Logistics GmbH",
+        "email": "max.mustermann@acme-logistics.de",
+        "phone": "+999 400 765432",
+    }
+    mail = """
+Acme Logistics GmbH
+Telefon: +999 400 765432
+E-Mail: max.mustermann@acme-logistics.de
+"""
+    result = _normalize_llm_result(parsed, mail)
+    assert result["is_allowed"] is True
+    assert result["full_name"] == "Max Mustermann"
+
+
+def test_normalize_result_rejects_generic_email_localpart_without_person_name():
+    parsed = {
+        "is_allowed": True,
+        "full_name": "",
+        "company": "Acme Logistics GmbH",
+        "email": "info@acme-logistics.de",
+        "phone": "+999 400 765432",
+    }
+    mail = """
+Acme Logistics GmbH
+Telefon: +999 400 765432
+E-Mail: info@acme-logistics.de
+"""
+    result = _normalize_llm_result(parsed, mail)
+    assert result == {"is_allowed": False}
+
+
 def test_extract_structured_contacts_from_mail_returns_all_contacts():
     mail = """
 Wie besprochen sind dies die jeweiligen Ansprechpartner:
@@ -275,6 +317,11 @@ def test_parse_first_llm_json_returns_false_object():
 ```
 """
     parsed = parse_first_llm_json(raw)
+    assert parsed == {"is_allowed": False, "reason": "newsletter"}
+
+
+def test_parse_first_llm_json_coerces_string_boolean_false():
+    parsed = parse_first_llm_json('{"is_allowed": "false", "reason": "newsletter"}')
     assert parsed == {"is_allowed": False, "reason": "newsletter"}
 
 

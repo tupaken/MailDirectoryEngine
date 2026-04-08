@@ -1,4 +1,5 @@
 using Microsoft.Exchange.WebServices.Data;
+using System.Text;
 
 internal sealed class EwsContactService : IEwsContactClientFactory
 {
@@ -26,6 +27,10 @@ internal sealed class EwsContactService : IEwsContactClientFactory
             else if (!string.IsNullOrWhiteSpace(config.Username) && !string.IsNullOrWhiteSpace(config.Password))
             {
                 service.Credentials = new WebCredentials(config.Username, config.Password, config.Domain);
+                service.PreAuthenticate = true;
+                service.HttpHeaders["Authorization"] =
+                    BuildBasicAuthorizationHeader(config.Username, config.Password);
+                service.HttpHeaders["X-AnchorMailbox"] = config.Mailbox;
             }
             else
             {
@@ -38,5 +43,12 @@ internal sealed class EwsContactService : IEwsContactClientFactory
         {
             throw new InvalidOperationException($"EWS client creation failed for mailbox '{config.Mailbox}'.", ex);
         }
+    }
+
+    private static string BuildBasicAuthorizationHeader(string username, string password)
+    {
+        var raw = $"{username}:{password}";
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(raw));
+        return $"Basic {encoded}";
     }
 }

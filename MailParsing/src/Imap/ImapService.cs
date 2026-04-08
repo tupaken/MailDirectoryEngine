@@ -65,6 +65,11 @@ namespace MailDirectoryEngine.src.Imap
         internal virtual void ConnectAndAuthenticate(ImapClient client, ImapConfig config)
         {
             client.Connect(config.Host, config.Port, SecureSocketOptions.SslOnConnect);
+            // Exchange/hosted providers may advertise mechanisms that fail in containerized clients.
+            // Keep simple username/password auth deterministic.
+            client.AuthenticationMechanisms.Remove("XOAUTH2");
+            client.AuthenticationMechanisms.Remove("GSSAPI");
+            client.AuthenticationMechanisms.Remove("NTLM");
             client.Authenticate(config.User, config.Password);
         }
     }

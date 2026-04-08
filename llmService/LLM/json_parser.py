@@ -110,6 +110,22 @@ def _replace_unquoted_keywords(value: str, replacements: dict[str, str]) -> str:
     return "".join(result)
 
 
+def _coerce_is_allowed_flag(parsed: dict) -> dict:
+    """Coerce common string forms of `is_allowed` into real booleans."""
+
+    if not isinstance(parsed, dict):
+        return parsed
+
+    value = parsed.get("is_allowed")
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes"}:
+            parsed["is_allowed"] = True
+        elif normalized in {"false", "0", "no"}:
+            parsed["is_allowed"] = False
+    return parsed
+
+
 def _load_json_object(text: str) -> dict | None:
     """Parse one JSON/Python-like object string into a JSON-compatible dict."""
 
@@ -129,7 +145,7 @@ def _load_json_object(text: str) -> dict | None:
     try:
         parsed = json.loads(normalized)
         if isinstance(parsed, dict):
-            return parsed
+            return _coerce_is_allowed_flag(parsed)
     except json.JSONDecodeError:
         pass
 
@@ -144,7 +160,8 @@ def _load_json_object(text: str) -> dict | None:
         return None
 
     if isinstance(parsed, dict):
-        return json.loads(json.dumps(parsed))
+        parsed = json.loads(json.dumps(parsed))
+        return _coerce_is_allowed_flag(parsed)
     return None
 
 
