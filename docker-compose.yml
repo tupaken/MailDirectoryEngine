@@ -94,13 +94,15 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
-    gpus: all
+    runtime: nvidia
     ports:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     restart: unless-stopped
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_MAX_LOADED_MODELS=1
       - OLLAMA_NUM_PARALLEL=1
