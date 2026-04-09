@@ -47,18 +47,23 @@ def main() -> None:
                 decision = llm_connection_with_disposition(text)
                 contacts = _normalize_contacts(decision.get("contacts"))
                 disposition = decision.get("disposition")
+                disposition_label = (
+                    disposition
+                    if isinstance(disposition, str) and disposition.strip()
+                    else "unknown"
+                )
 
                 if contacts:
                     _sync_contacts(message.id, contacts, text)
                     db.mark_operated("Inbox", message.id)
                     continue
 
-                if disposition == DISPOSITION_IRRELEVANT:
+                if disposition_label == DISPOSITION_IRRELEVANT:
                     db.mark_operated("Inbox", message.id)
                     print(f"Message {message.id} marked operated: irrelevant")
                     continue
 
-                print(f"Message {message.id} left unoperated: no clear decision")
+                print(f"Message {message.id} left unoperated: no clear decision ({disposition_label})")
 
             except Exception as exc:
                 print(f"Message {message.id} failed: {exc}")

@@ -208,7 +208,7 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         contact.BusinessHomePage = dto.WebPage;
 
         if (!string.IsNullOrWhiteSpace(dto.Notes))
-            contact.Body = dto.Notes;
+            contact.Body = "Automatisch angelegt \n"+dto.Notes;
 
         MapEmails(contact, dto);
         MapPhones(contact, dto);

@@ -7,7 +7,15 @@ from urllib import error, request
 
 SCHEMA_VERSION = "1.0"
 DEFAULT_CONTACT_SERVICE_ENDPOINT = "http://localhost:5000/api/contacts/canonical"
-PHONE_RE = re.compile(r"(?:(?:\+|00)\d[\d\s()/-]{5,}\d|\b\d{6,}\b)")
+PHONE_RE = re.compile(
+    r"(?:(?:\+|00)\d[\d\s()/-]{5,}\d|\b0\d[\d\s()/-]{5,}\d\b|\b\d{6,17}\b)"
+)
+MAX_PHONE_DIGITS = 17
+LEGAL_NUMBER_LINE_HINT_RE = re.compile(
+    r"(hrb|hraa|handelsregister|registergericht|amtsgericht|ust|ust-id|umsatzsteuer|steuernummer|tax|iban|bic)",
+    flags=re.IGNORECASE,
+)
+HEADER_MARKER_PREFIXES = ("von:", "from:", "gesendet:", "sent:", "an:", "to:", "cc:", "bcc:")
 
 
 def _clean_text(value: object) -> str:
@@ -58,6 +66,12 @@ def _phone_digits(value: str) -> str:
     return re.sub(r"\D", "", _clean_text(value))
 
 
+def _is_reasonable_phone_digits(digits: str) -> bool:
+    """Validate coarse phone length bounds to filter glued/invalid values."""
+
+    return 6 <= len(digits) <= MAX_PHONE_DIGITS
+
+
 def _normalize_phone_type(type_hint: str) -> str:
     """Map free text phone labels to canonical phone types."""
 
@@ -67,6 +81,8 @@ def _normalize_phone_type(type_hint: str) -> str:
 
     if any(token in label for token in ("telefax", "fax")):
         return "fax"
+    if label in {"m", "mob"}:
+        return "mobile"
     if any(token in label for token in ("mobil", "mobile", "handy", "cell")):
         return "mobile"
     if any(token in label for token in ("home", "privat", "private")):
@@ -96,9 +112,28 @@ def _extract_phone_candidates_from_text(source_text: str) -> list[tuple[str, str
     if not source_text:
         return candidates
 
-    for raw_line in str(source_text).splitlines():
-        line = _clean_text(raw_line)
+    return _extract_phone_candidates_from_text_with_scope(source_text, allowed_indexes=None)
+
+
+def _extract_phone_candidates_from_text_with_scope(
+    source_text: str,
+    allowed_indexes: set[int] | None,
+) -> list[tuple[str, str]]:
+    """Extract labeled phone-like values from source text within optional line scope."""
+
+    candidates: list[tuple[str, str]] = []
+    if not source_text:
+        return candidates
+
+    lines = [_clean_text(raw_line) for raw_line in str(source_text).splitlines()]
+    lines = [line for line in lines if line]
+
+    for idx, line in enumerate(lines):
+        if allowed_indexes is not None and idx not in allowed_indexes:
+            continue
         if not line:
+            continue
+        if LEGAL_NUMBER_LINE_HINT_RE.search(line):
             continue
 
         matches = PHONE_RE.findall(line)
@@ -112,10 +147,86 @@ def _extract_phone_candidates_from_text(source_text: str) -> list[tuple[str, str
 
         for match in matches:
             phone_value = _clean_text(match)
-            if phone_value:
+            if not phone_value:
+                continue
+            digits = _phone_digits(phone_value)
+            if _is_reasonable_phone_digits(digits):
                 candidates.append((phone_type, phone_value))
 
     return candidates
+
+
+def _line_matches_name_variant(line: str, full_name: str) -> bool:
+    """Check whether one line contains full name in direct or comma-order form."""
+
+    line_folded = _clean_text(line).casefold()
+    name_folded = _clean_text(full_name).casefold()
+    if not line_folded or not name_folded:
+        return False
+    if name_folded in line_folded:
+        return True
+
+    parts = [part for part in name_folded.split() if part]
+    if len(parts) < 2:
+        return False
+    first = parts[0]
+    last = parts[-1]
+    if first in line_folded and last in line_folded:
+        return True
+    comma_variant = f"{last}, {first}"
+    return comma_variant in line_folded
+
+
+def _build_relevant_phone_context_indexes(contact: dict, source_text: str) -> set[int]:
+    """Build a line-index scope around contact identity markers (email/name/phone/company)."""
+
+    if not source_text:
+        return set()
+
+    lines = [_clean_text(raw_line) for raw_line in str(source_text).splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return set()
+
+    marker_indexes: set[int] = set()
+    identity_indexes: set[int] = set()
+
+    email_value = _clean_text(contact.get("email")).casefold()
+    full_name = _clean_text(contact.get("full_name"))
+    company = _clean_text(contact.get("company")).casefold()
+    phone_digits = _phone_digits(_clean_text(contact.get("phone")))
+
+    for idx, line in enumerate(lines):
+        line_folded = line.casefold()
+        if email_value and email_value in line_folded:
+            marker_indexes.add(idx)
+            identity_indexes.add(idx)
+        if full_name and _line_matches_name_variant(line, full_name):
+            marker_indexes.add(idx)
+            identity_indexes.add(idx)
+        if company and company in line_folded:
+            marker_indexes.add(idx)
+            identity_indexes.add(idx)
+        if phone_digits and phone_digits in _phone_digits(line):
+            marker_indexes.add(idx)
+
+    # Only scope when at least one identity marker exists; otherwise keep broad extraction.
+    if not identity_indexes:
+        return set()
+
+    scoped_indexes: set[int] = set()
+    for idx in marker_indexes:
+        line_folded = lines[idx].casefold()
+        if line_folded.startswith(HEADER_MARKER_PREFIXES):
+            start = idx
+            end = min(len(lines) - 1, idx + 3)
+        else:
+            start = max(0, idx - 2)
+            end = min(len(lines) - 1, idx + 2)
+        for window_idx in range(start, end + 1):
+            scoped_indexes.add(window_idx)
+
+    return scoped_indexes
 
 
 def _collect_phone_candidates(contact: dict, source_text: str) -> list[tuple[str, str]]:
@@ -126,6 +237,9 @@ def _collect_phone_candidates(contact: dict, source_text: str) -> list[tuple[str
     def add_candidate(phone_type: str, value: object) -> None:
         raw = _clean_text(value)
         if not raw:
+            return
+        digits = _phone_digits(raw)
+        if not _is_reasonable_phone_digits(digits):
             return
         candidates.append((_normalize_phone_type(phone_type), raw))
 
@@ -145,7 +259,11 @@ def _collect_phone_candidates(contact: dict, source_text: str) -> list[tuple[str
                 continue
             add_candidate(item.get("type", "other"), item.get("e164") or item.get("raw"))
 
-    candidates.extend(_extract_phone_candidates_from_text(source_text))
+    relevant_indexes = _build_relevant_phone_context_indexes(contact, source_text)
+    if relevant_indexes:
+        candidates.extend(_extract_phone_candidates_from_text_with_scope(source_text, relevant_indexes))
+    else:
+        candidates.extend(_extract_phone_candidates_from_text(source_text))
     return candidates
 
 
