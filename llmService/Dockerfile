@@ -6,7 +6,7 @@ ENV PIP_ROOT_USER_ACTION=ignore
 
 WORKDIR /app
 
-COPY llmService/ /app/llmService/
+COPY . /app/llmService/
 RUN pip install --upgrade pip && pip install \
     "beautifulsoup4>=4.14.3" \
     "dotenv>=0.9.9" \
