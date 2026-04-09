@@ -20,12 +20,12 @@ def test_build_canonical_contact_payload_maps_llm_shape(monkeypatch):
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
-            "full_name": "Anna Meyer",
+            "full_name": "Robin Beispiel",
             "company": "Acme",
-            "email": "anna@acme.de",
+            "email": "robin.beispiel@anon.invalid",
             "phone": "+49 (151) 111222",
             "address": "Musterstrasse 1",
-            "website": "acme.de",
+            "website": "anon.invalid",
         },
         source_message_id=42,
     )
@@ -33,8 +33,8 @@ def test_build_canonical_contact_payload_maps_llm_shape(monkeypatch):
     assert payload["schema_version"] == "1.0"
     assert payload["account_key"] == "bewerbung"
     assert payload["source_message_id"] == "42"
-    assert payload["contact"]["given_name"] == "Anna"
-    assert payload["contact"]["surname"] == "Meyer"
+    assert payload["contact"]["given_name"] == "Robin"
+    assert payload["contact"]["surname"] == "Beispiel"
     assert payload["contact"]["phones"] == [
         {"type": "business", "raw": "+49 (151) 111222", "e164": "+49151111222"}
     ]
@@ -50,7 +50,7 @@ def test_build_canonical_contact_payload_extracts_fax_mobile_and_other_from_sour
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
-            "full_name": "Anna Meyer",
+            "full_name": "Robin Beispiel",
             "phone": "+49 30 123456",
         },
         source_message_id=7,
@@ -67,6 +67,86 @@ Zentrale: +49 30 123458
     assert {"type": "fax", "raw": "+49 30 123457", "e164": "+4930123457"} in phones
     assert {"type": "mobile", "raw": "+49 171 555000", "e164": "+49171555000"} in phones
     assert {"type": "business", "raw": "+49 30 123458", "e164": "+4930123458"} in phones
+
+
+def test_build_canonical_contact_payload_ignores_glued_long_phone_numbers(monkeypatch):
+    """Unreasonably long digit strings from source text must be filtered out."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Alpha Bravo Extern",
+            "phone": "+49 171 4535343",
+        },
+        source_message_id=9,
+        source_text="""
+Telefon: +49 171 4535343
+Mobil: +49159076600234915907660023
+""",
+    )
+
+    phones = payload["contact"]["phones"]
+    assert {"type": "business", "raw": "+49 171 4535343", "e164": "+491714535343"} in phones
+    assert all("6002349159" not in item["raw"] for item in phones)
+
+
+def test_build_canonical_contact_payload_skips_register_numbers_and_keeps_mobile(monkeypatch):
+    """Register IDs like HRB must not be extracted as phone numbers."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Juliane Reinhardt-Mueller",
+            "phone": "+49 (341) 3320 4342",
+        },
+        source_message_id=11,
+        source_text="""
+T: +49 (341) 3320 4342
+M: 0173 3982023
+Handelsregisternummer: HRB 134441 B
+""",
+    )
+
+    phones = payload["contact"]["phones"]
+    assert {"type": "business", "raw": "+49 (341) 3320 4342", "e164": "+4934133204342"} in phones
+    assert {"type": "mobile", "raw": "0173 3982023"} in phones
+    assert all("134441" not in item["raw"] for item in phones)
+
+
+def test_build_canonical_contact_payload_limits_text_phone_extraction_to_contact_context(
+    monkeypatch,
+):
+    """Phone extraction should avoid unrelated numbers from other signature blocks."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Jordan Beispiel",
+            "email": "jordan.beispiel@anon.invalid",
+            "phone": "+49-34292-710-12",
+        },
+        source_message_id=12,
+        source_text="""
+Mobil: +49 177 8112663
+E-Mail: backup.person@anon.invalid
+
+Von: Beispiel, Jordan <jordan.beispiel@anon.invalid>
+Telefon: +49-34292-710-12
+Mobil: +49-151-15343316
+E-Mail: jordan.beispiel@anon.invalid
+""",
+    )
+
+    phones = payload["contact"]["phones"]
+    assert {"type": "business", "raw": "+49-34292-710-12", "e164": "+493429271012"} in phones
+    assert {"type": "mobile", "raw": "+49-151-15343316", "e164": "+4915115343316"} in phones
+    assert all("+49 177 8112663" not in item["raw"] for item in phones)
 
 
 def test_build_canonical_contact_payload_requires_phone():
@@ -121,3 +201,6 @@ def test_send_canonical_contact_payload_wraps_http_error(monkeypatch):
 
     with pytest.raises(RuntimeError, match="HTTP 400"):
         send_canonical_contact_payload({"schema_version": "1.0"})
+
+
+

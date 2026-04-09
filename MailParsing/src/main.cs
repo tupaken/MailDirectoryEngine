@@ -12,7 +12,7 @@ namespace MailDirectoryEngine.src
     /// </summary>
     internal class Program
     {
-        private const int DefaultInitialSyncLimit = 20;
+        private const int DefaultInitialSyncLimit = 10;
         private const int DefaultPollIntervalSeconds = 30;
 
         /// <summary>
