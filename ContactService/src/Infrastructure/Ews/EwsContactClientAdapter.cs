@@ -1,16 +1,17 @@
 using ContactService.Domain.Abstractions;
 using ContactService.Domain.Contacts;
 using Microsoft.Exchange.WebServices.Data;
-
 namespace ContactService.Infrastructure.Ews;
 
 internal sealed class EwsContactClientAdapter : IEwsContactClient
 {
     private readonly ExchangeService _service;
+    private readonly IContactStore _contactStore;
 
-    public EwsContactClientAdapter(ExchangeService service)
+    public EwsContactClientAdapter(ExchangeService service, IContactStore contactStore)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
+        _contactStore = contactStore ?? throw new ArgumentNullException(nameof(contactStore));
     }
 
     public Task<ContactPageDto> GetContactsPageAsync(int offset, int pageSize, CancellationToken ct)
@@ -193,6 +194,9 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         var contact = new Contact(_service);
         MapToEwsContact(contact, dto);
 
+        if (await _contactStore.ExistsAsync(dto, ct).ConfigureAwait(false))
+            return;
+        //TODO: save new contacts in db  
         await System.Threading.Tasks.Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();

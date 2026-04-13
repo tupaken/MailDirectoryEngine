@@ -2,6 +2,8 @@ using ContactService.Api.Endpoints;
 using ContactService.Domain.Abstractions;
 using ContactService.Infrastructure.Ews;
 using System.Text.Json.Serialization;
+using Npgsql;
+using ContactService.Api.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +13,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 builder.Services.AddSingleton<IEwsConfigProvider, EnvEwsConfigProvider>();
 builder.Services.AddSingleton<IEwsContactClientFactory, EwsContactClientFactory>();
+
+builder.Services.AddPostgres();
 
 var app = builder.Build();
 

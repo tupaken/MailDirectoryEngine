@@ -1,0 +1,10 @@
+
+
+using ContactService.Domain.Contacts;
+
+namespace ContactService.Domain.Abstractions;
+
+internal interface IContactStore
+{
+    Task<bool> ExistsAsync(ContactDto dto, CancellationToken ct);
+}

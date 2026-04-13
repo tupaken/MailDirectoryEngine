@@ -6,6 +6,13 @@ namespace ContactService.Infrastructure.Ews;
 
 internal sealed class EwsContactClientFactory : IEwsContactClientFactory
 {
+    private readonly IContactStore _contactStore;
+
+    public EwsContactClientFactory(IContactStore contactStore)
+    {
+        _contactStore = contactStore ?? throw new ArgumentNullException(nameof(contactStore));
+    }
+
     public IEwsContactClient Create(EwsConfig config)
     {
         if (config is null)
@@ -40,7 +47,7 @@ internal sealed class EwsContactClientFactory : IEwsContactClientFactory
                 throw new InvalidOperationException("No valid EWS auth configuration found.");
             }
 
-            return new EwsContactClientAdapter(service);
+            return new EwsContactClientAdapter(service, _contactStore);
         }
         catch (Exception ex)
         {
