@@ -1,3 +1,5 @@
+namespace ContactService.Domain.Abstractions;
+
 internal sealed class EwsConfig
 {
     public string ServiceUrl { get; set; } = "";

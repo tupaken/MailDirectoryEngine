@@ -1,4 +1,7 @@
+using ContactService.Domain.Abstractions;
 using DotNetEnv;
+
+namespace ContactService.Infrastructure.Ews;
 
 internal sealed class EnvEwsConfigProvider : IEwsConfigProvider
 {

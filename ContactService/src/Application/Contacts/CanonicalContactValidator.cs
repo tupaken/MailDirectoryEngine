@@ -1,3 +1,7 @@
+using ContactService.Api.Contracts;
+
+namespace ContactService.Application.Contacts;
+
 internal static class CanonicalContactValidator
 {
     public static string? Validate(CanonicalContactEnvelopeDto? payload)
