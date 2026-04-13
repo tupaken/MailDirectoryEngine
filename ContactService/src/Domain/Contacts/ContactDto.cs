@@ -1,10 +1,4 @@
-internal sealed record ContactAddressDto(
-    string? Street,
-    string? City,
-    string? State,
-    string? PostalCode,
-    string? CountryOrRegion
-);
+namespace ContactService.Domain.Contacts;
 
 internal sealed record ContactDto(
     string? Id,
@@ -28,9 +22,4 @@ internal sealed record ContactDto(
     string? BusinessFax,
     string? MobilePhone,
     string? Notes
-);
-
-internal sealed record ContactPageDto(
-    IReadOnlyList<ContactDto> Items,
-    int? NextOffset
 );

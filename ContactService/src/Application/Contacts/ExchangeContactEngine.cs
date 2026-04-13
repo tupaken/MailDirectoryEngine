@@ -1,3 +1,8 @@
+using ContactService.Domain.Abstractions;
+using ContactService.Domain.Contacts;
+
+namespace ContactService.Application.Contacts;
+
 internal sealed class ExchangeContactEngine
 {
     private readonly IEwsContactClientFactory _factory;

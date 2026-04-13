@@ -1,4 +1,8 @@
+using ContactService.Domain.Abstractions;
+using ContactService.Domain.Contacts;
 using Microsoft.Exchange.WebServices.Data;
+
+namespace ContactService.Infrastructure.Ews;
 
 internal sealed class EwsContactClientAdapter : IEwsContactClient
 {
@@ -208,7 +212,7 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         contact.BusinessHomePage = dto.WebPage;
 
         if (!string.IsNullOrWhiteSpace(dto.Notes))
-            contact.Body = "Automatisch angelegt \n"+dto.Notes;
+            contact.Body = "Automatisch angelegt \n" + dto.Notes;
 
         MapEmails(contact, dto);
         MapPhones(contact, dto);

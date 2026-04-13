@@ -1,7 +1,10 @@
+using ContactService.Domain.Abstractions;
 using Microsoft.Exchange.WebServices.Data;
 using System.Text;
 
-internal sealed class EwsContactService : IEwsContactClientFactory
+namespace ContactService.Infrastructure.Ews;
+
+internal sealed class EwsContactClientFactory : IEwsContactClientFactory
 {
     public IEwsContactClient Create(EwsConfig config)
     {

@@ -1,3 +1,8 @@
+using ContactService.Api.Contracts;
+using ContactService.Domain.Contacts;
+
+namespace ContactService.Application.Contacts;
+
 internal static class CanonicalContactMapper
 {
     public static ContactDto ToContactDto(CanonicalContactEnvelopeDto payload)
