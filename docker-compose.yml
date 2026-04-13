@@ -37,6 +37,8 @@ services:
       - .env
     environment:
       ASPNETCORE_URLS: http://+:5000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
       EWS_ACCOUNT_KEY: ${EWS_ACCOUNT_KEY:-bewerbung}
     ports:
       - "5000:5000"

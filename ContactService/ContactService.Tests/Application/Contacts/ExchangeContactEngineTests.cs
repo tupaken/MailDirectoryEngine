@@ -215,7 +215,7 @@ public class ExchangeContactEngineTests
             return Task.FromResult(Pages.Dequeue());
         }
 
-        public Task AddContactAsync(ContactDto dto, CancellationToken ct)
+        public Task AddContactAsync(ContactDto dto, CancellationToken ct, string? sourceMessageId = null)
         {
             AddedContact = dto;
             return Task.CompletedTask;

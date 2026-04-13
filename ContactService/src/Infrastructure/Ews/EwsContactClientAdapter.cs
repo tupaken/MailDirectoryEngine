@@ -186,7 +186,10 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         }
     }
 
-    public async System.Threading.Tasks.Task AddContactAsync(ContactDto dto, CancellationToken ct)
+    public async System.Threading.Tasks.Task AddContactAsync(
+        ContactDto dto,
+        CancellationToken ct,
+        string? sourceMessageId = null)
     {
         if (dto is null)
             throw new ArgumentNullException(nameof(dto));
@@ -196,12 +199,14 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
 
         if (await _contactStore.ExistsAsync(dto, ct).ConfigureAwait(false))
             return;
-        //TODO: save new contacts in db  
+
         await System.Threading.Tasks.Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
             contact.Save(WellKnownFolderName.Contacts);
         }, ct).ConfigureAwait(false);
+
+        await _contactStore.InsertAsync(dto, sourceMessageId, ct).ConfigureAwait(false);
     }
 
     private static void MapToEwsContact(Contact contact, ContactDto dto)

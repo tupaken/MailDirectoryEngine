@@ -7,4 +7,5 @@ namespace ContactService.Domain.Abstractions;
 internal interface IContactStore
 {
     Task<bool> ExistsAsync(ContactDto dto, CancellationToken ct);
+    Task<long> InsertAsync(ContactDto dto, string? sourceMessageId, CancellationToken ct);
 }
