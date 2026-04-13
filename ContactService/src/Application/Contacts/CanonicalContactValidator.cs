@@ -4,6 +4,11 @@ namespace ContactService.Application.Contacts;
 
 internal static class CanonicalContactValidator
 {
+    /// <summary>
+    /// Validates the canonical contact payload before mapping and persistence.
+    /// </summary>
+    /// <param name="payload">Incoming canonical contact envelope.</param>
+    /// <returns>Validation error message when invalid; otherwise <c>null</c>.</returns>
     public static string? Validate(CanonicalContactEnvelopeDto? payload)
     {
         if (payload is null)

@@ -5,6 +5,9 @@ namespace ContactService.Infrastructure.Ews;
 
 internal sealed class EnvEwsConfigProvider : IEwsConfigProvider
 {
+    /// <summary>
+    /// Loads repository-level <c>.env</c> file when present.
+    /// </summary>
     public EnvEwsConfigProvider()
     {
         var envPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".env"));
@@ -12,6 +15,11 @@ internal sealed class EnvEwsConfigProvider : IEwsConfigProvider
             Env.Load(envPath);
     }
 
+    /// <summary>
+    /// Resolves account-specific EWS settings from environment variables.
+    /// </summary>
+    /// <param name="accountKey">Logical account key (for example <c>bewerbung</c>).</param>
+    /// <returns>Resolved EWS configuration for the requested account.</returns>
     public EwsConfig GetConfig(string accountKey)
     {
         if (string.IsNullOrWhiteSpace(accountKey))

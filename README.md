@@ -215,6 +215,12 @@ Test project only:
 dotnet test .\MailParsing\MailDirectoryEngine.Tests\MailDirectoryEngine.Tests.csproj
 ```
 
+ContactService tests:
+
+```powershell
+dotnet test .\ContactService\ContactService.Tests\ContactService.Tests.csproj
+```
+
 Single test (example):
 
 ```powershell
