@@ -6,6 +6,11 @@ namespace ContactService.Api.Endpoints;
 
 internal static class ContactsEndpoints
 {
+    /// <summary>
+    /// Registers contact read and canonical ingest endpoints.
+    /// </summary>
+    /// <param name="app">Endpoint route builder instance.</param>
+    /// <returns>The same route builder for chaining.</returns>
     public static IEndpointRouteBuilder MapContactsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/contacts", async Task<IResult> (

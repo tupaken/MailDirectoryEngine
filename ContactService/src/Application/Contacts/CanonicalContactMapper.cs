@@ -5,6 +5,11 @@ namespace ContactService.Application.Contacts;
 
 internal static class CanonicalContactMapper
 {
+    /// <summary>
+    /// Maps a canonical contact envelope to the internal contact DTO used by the EWS layer.
+    /// </summary>
+    /// <param name="payload">Canonical payload to map.</param>
+    /// <returns>Mapped contact DTO with normalized names, phones, and notes.</returns>
     public static ContactDto ToContactDto(CanonicalContactEnvelopeDto payload)
     {
         var contact = payload.Contact;
