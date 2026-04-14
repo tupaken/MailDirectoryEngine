@@ -41,20 +41,20 @@ internal sealed class PostgresContactStore : IContactStore
         return (bool)(await cmd.ExecuteScalarAsync(ct) ?? false);
     }
 
-    public async Task<long> InsertAsync(ContactDto dto, string? sourceMessageId, CancellationToken ct)
+    public async Task<long> InsertAsync(ContactDto dto, string ewsId ,string? sourceMessageId, CancellationToken ct)
     {
         const string sql = """
         INSERT INTO contacts (
             source_message_id, display_name, full_name, given_name, middle_name, surname,
             company_name, job_title, file_as, email, website,
             business_phone, home_phone, mobile_phone, business_fax,
-            notes, emails, phone_numbers, addresses
+            notes, emails, phone_numbers, addresses, ews_id
         )
         VALUES (
             @source_message_id, @display_name, @full_name, @given_name, @middle_name, @surname,
             @company_name, @job_title, @file_as, @email, @website,
             @business_phone, @home_phone, @mobile_phone, @business_fax,
-            @notes, CAST(@emails AS jsonb), CAST(@phone_numbers AS jsonb), CAST(@addresses AS jsonb)
+            @notes, CAST(@emails AS jsonb), CAST(@phone_numbers AS jsonb), CAST(@addresses AS jsonb), @ews_ID
         )
         RETURNING id;
         """;
@@ -79,6 +79,7 @@ internal sealed class PostgresContactStore : IContactStore
         cmd.Parameters.AddWithValue("emails", JsonSerializer.Serialize(dto.Emails));
         cmd.Parameters.AddWithValue("phone_numbers", JsonSerializer.Serialize(dto.PhoneNumbers));
         cmd.Parameters.AddWithValue("addresses", JsonSerializer.Serialize(dto.Addresses));
+        cmd.Parameters.AddWithValue("ews_id",ewsId);
 
         var id = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt64(id);

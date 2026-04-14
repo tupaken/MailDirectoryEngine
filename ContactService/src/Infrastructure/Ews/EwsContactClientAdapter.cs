@@ -204,9 +204,12 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         {
             ct.ThrowIfCancellationRequested();
             contact.Save(WellKnownFolderName.Contacts);
+            var ewsItemId = contact.Id?.UniqueId;
         }, ct).ConfigureAwait(false);
+        string ewsItemId = contact.Id?.UniqueId
+            ?? throw new InvalidOperationException("Exchange contact was saved without an item id.");
 
-        await _contactStore.InsertAsync(dto, sourceMessageId, ct).ConfigureAwait(false);
+        await _contactStore.InsertAsync(dto, ewsItemId ,sourceMessageId, ct).ConfigureAwait(false);
     }
 
     private static void MapToEwsContact(Contact contact, ContactDto dto)
