@@ -59,7 +59,8 @@ internal sealed class ExchangeContactEngine
     /// </summary>
     /// <param name="dto">Contact data to create.</param>
     /// <param name="ct">Cancellation token for the operation.</param>
-    public async Task AddContactAsync(ContactDto dto, CancellationToken ct)
+    /// <param name="sourceMessageId">Optional source message id used for DB persistence metadata.</param>
+    public async Task AddContactAsync(ContactDto dto, CancellationToken ct, string? sourceMessageId = null)
     {
         if (dto is null)
             throw new ArgumentNullException(nameof(dto));
@@ -67,7 +68,7 @@ internal sealed class ExchangeContactEngine
         var config = _configProvider.GetConfig(_accountKey);
         using var client = _factory.Create(config);
 
-        await client.AddContactAsync(dto, ct).ConfigureAwait(false);
+        await client.AddContactAsync(dto, ct, sourceMessageId).ConfigureAwait(false);
     }
 
 }

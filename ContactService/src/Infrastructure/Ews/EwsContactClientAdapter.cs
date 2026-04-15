@@ -1,16 +1,30 @@
 using ContactService.Domain.Abstractions;
 using ContactService.Domain.Contacts;
 using Microsoft.Exchange.WebServices.Data;
-
 namespace ContactService.Infrastructure.Ews;
 
 internal sealed class EwsContactClientAdapter : IEwsContactClient
 {
     private readonly ExchangeService _service;
+    private readonly IContactStore _contactStore;
+    private readonly Func<ContactDto, CancellationToken, System.Threading.Tasks.Task<string>> _saveContactAsync;
+    private readonly Func<string, System.Threading.Tasks.Task> _deleteContactAsync;
 
-    public EwsContactClientAdapter(ExchangeService service)
+    public EwsContactClientAdapter(ExchangeService service, IContactStore contactStore)
+        : this(service, contactStore, saveContactAsync: null, deleteContactAsync: null)
+    {
+    }
+
+    internal EwsContactClientAdapter(
+        ExchangeService service,
+        IContactStore contactStore,
+        Func<ContactDto, CancellationToken, System.Threading.Tasks.Task<string>>? saveContactAsync,
+        Func<string, System.Threading.Tasks.Task>? deleteContactAsync)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
+        _contactStore = contactStore ?? throw new ArgumentNullException(nameof(contactStore));
+        _saveContactAsync = saveContactAsync ?? SaveContactAsync;
+        _deleteContactAsync = deleteContactAsync ?? DeleteContactAsync;
     }
 
     public Task<ContactPageDto> GetContactsPageAsync(int offset, int pageSize, CancellationToken ct)
@@ -185,11 +199,48 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         }
     }
 
-    public async System.Threading.Tasks.Task AddContactAsync(ContactDto dto, CancellationToken ct)
+    public async System.Threading.Tasks.Task AddContactAsync(
+        ContactDto dto,
+        CancellationToken ct,
+        string? sourceMessageId = null)
     {
         if (dto is null)
             throw new ArgumentNullException(nameof(dto));
 
+        string? ex = await _contactStore.ExistsAsync(dto, ct);
+
+        if (ex!=null)
+        {       
+                //TODO: contacts update or merge leer fields 
+                Console.WriteLine("\ncontact exists\n"+ex+"\n");
+                return;
+        }
+
+        var ewsItemId = await _saveContactAsync(dto, ct).ConfigureAwait(false);
+
+        try
+        {
+            await _contactStore.InsertAsync(dto, ewsItemId, sourceMessageId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex2)
+        {
+            try
+            {
+                await _deleteContactAsync(ewsItemId).ConfigureAwait(false);
+            }
+            catch (Exception rollbackEx)
+            {
+                throw new InvalidOperationException(
+                    $"Persisting contact metadata failed after saving Exchange contact '{ewsItemId}', and rollback delete failed.",
+                    new AggregateException(ex2, rollbackEx));
+            }
+
+            throw;
+        }
+    }
+
+    private async System.Threading.Tasks.Task<string> SaveContactAsync(ContactDto dto, CancellationToken ct)
+    {
         var contact = new Contact(_service);
         MapToEwsContact(contact, dto);
 
@@ -198,6 +249,18 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
             ct.ThrowIfCancellationRequested();
             contact.Save(WellKnownFolderName.Contacts);
         }, ct).ConfigureAwait(false);
+
+        return contact.Id?.UniqueId
+            ?? throw new InvalidOperationException("Exchange contact was saved without an item id.");
+    }
+
+    private System.Threading.Tasks.Task DeleteContactAsync(string ewsItemId)
+    {
+        return System.Threading.Tasks.Task.Run(() =>
+        {
+            var savedContact = Contact.Bind(_service, new ItemId(ewsItemId));
+            savedContact.Delete(DeleteMode.HardDelete);
+        });
     }
 
     private static void MapToEwsContact(Contact contact, ContactDto dto)

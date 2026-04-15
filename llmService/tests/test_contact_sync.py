@@ -36,7 +36,7 @@ def test_build_canonical_contact_payload_maps_llm_shape(monkeypatch):
     assert payload["contact"]["given_name"] == "Robin"
     assert payload["contact"]["surname"] == "Beispiel"
     assert payload["contact"]["phones"] == [
-        {"type": "business", "raw": "+49 (151) 111222", "e164": "+49151111222"}
+        {"type": "business", "raw": "+49 151 111222", "e164": "+49151111222"}
     ]
 
 
@@ -63,10 +63,51 @@ Zentrale: +49 30 123458
     )
 
     phones = payload["contact"]["phones"]
-    assert {"type": "business", "raw": "+49 30 123456", "e164": "+4930123456"} in phones
-    assert {"type": "fax", "raw": "+49 30 123457", "e164": "+4930123457"} in phones
+    assert {"type": "business", "raw": "+49 301 23456", "e164": "+4930123456"} in phones
+    assert {"type": "fax", "raw": "+49 301 23457", "e164": "+4930123457"} in phones
     assert {"type": "mobile", "raw": "+49 171 555000", "e164": "+49171555000"} in phones
-    assert {"type": "business", "raw": "+49 30 123458", "e164": "+4930123458"} in phones
+    assert {"type": "business", "raw": "+49 301 23458", "e164": "+4930123458"} in phones
+
+
+def test_build_canonical_contact_payload_formats_0049_and_e164_phone_sources(monkeypatch):
+    """German numbers from 0049 and e164 inputs should use the shared raw display format."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Robin Beispiel",
+            "phone": "0049 151 111222",
+            "phone_numbers": [
+                {"type": "mobile", "e164": "+491701234567"},
+            ],
+        },
+        source_message_id=8,
+    )
+
+    phones = payload["contact"]["phones"]
+    assert {"type": "business", "raw": "+49 151 111222", "e164": "+49151111222"} in phones
+    assert {"type": "mobile", "raw": "+49 170 1234567", "e164": "+491701234567"} in phones
+
+
+def test_build_canonical_contact_payload_keeps_non_german_international_display(monkeypatch):
+    """Non-German international numbers should keep their original raw display text."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Robin Beispiel",
+            "phone": "+43 1 2345678",
+        },
+        source_message_id=10,
+    )
+
+    assert payload["contact"]["phones"] == [
+        {"type": "business", "raw": "+43 1 2345678", "e164": "+4312345678"}
+    ]
 
 
 def test_build_canonical_contact_payload_ignores_glued_long_phone_numbers(monkeypatch):
@@ -112,8 +153,8 @@ Handelsregisternummer: HRB 134441 B
     )
 
     phones = payload["contact"]["phones"]
-    assert {"type": "business", "raw": "+49 (341) 3320 4342", "e164": "+4934133204342"} in phones
-    assert {"type": "mobile", "raw": "0173 3982023"} in phones
+    assert {"type": "business", "raw": "+49 341 33204342", "e164": "+4934133204342"} in phones
+    assert {"type": "mobile", "raw": "+49 173 3982023", "e164": "+491733982023"} in phones
     assert all("134441" not in item["raw"] for item in phones)
 
 
@@ -144,8 +185,8 @@ E-Mail: jordan.beispiel@anon.invalid
     )
 
     phones = payload["contact"]["phones"]
-    assert {"type": "business", "raw": "+49-34292-710-12", "e164": "+493429271012"} in phones
-    assert {"type": "mobile", "raw": "+49-151-15343316", "e164": "+4915115343316"} in phones
+    assert {"type": "business", "raw": "+49 342 9271012", "e164": "+493429271012"} in phones
+    assert {"type": "mobile", "raw": "+49 151 15343316", "e164": "+4915115343316"} in phones
     assert all("+49 177 8112663" not in item["raw"] for item in phones)
 
 

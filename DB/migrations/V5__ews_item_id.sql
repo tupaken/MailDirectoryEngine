@@ -1,0 +1,2 @@
+ALTER TABLE contacts
+ADD ews_id TEXT NOT NULL UNIQUE;

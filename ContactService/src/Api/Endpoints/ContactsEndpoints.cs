@@ -48,7 +48,7 @@ internal static class ContactsEndpoints
             var dto = CanonicalContactMapper.ToContactDto(payload);
             var engine = new ExchangeContactEngine(factory, configProvider, resolvedAccountKey);
 
-            await engine.AddContactAsync(dto, ct).ConfigureAwait(false);
+            await engine.AddContactAsync(dto, ct, payload.SourceMessageId).ConfigureAwait(false);
 
             return Results.Ok(new ContactSyncResultDto(
                 Status: "created",

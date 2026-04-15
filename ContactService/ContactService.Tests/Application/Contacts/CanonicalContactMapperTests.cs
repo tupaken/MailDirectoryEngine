@@ -98,6 +98,42 @@ public class CanonicalContactMapperTests
         Assert.Equal(3, dto.PhoneNumbers.Count);
     }
 
+    [Fact]
+    public void ToContactDto_PrefersFormattedRawPhoneOverE164()
+    {
+        var payload = BuildPayload(
+            fullName: "Max Mustermann",
+            givenName: null,
+            surname: null,
+            email: "max@example.test",
+            phones: new List<CanonicalPhoneDto>
+            {
+                new(Type: "business", Raw: "+49 151 111222", E164: "+49151111222")
+            });
+
+        var dto = CanonicalContactMapper.ToContactDto(payload);
+
+        Assert.Equal("+49 151 111222", dto.BusinessPhone);
+    }
+
+    [Fact]
+    public void ToContactDto_FallsBackToE164_WhenRawIsWhitespace()
+    {
+        var payload = BuildPayload(
+            fullName: "Max Mustermann",
+            givenName: null,
+            surname: null,
+            email: "max@example.test",
+            phones: new List<CanonicalPhoneDto>
+            {
+                new(Type: "business", Raw: " ", E164: "+49151111222")
+            });
+
+        var dto = CanonicalContactMapper.ToContactDto(payload);
+
+        Assert.Equal("+49151111222", dto.BusinessPhone);
+    }
+
     /// <summary>
     /// Verifies that notes are composed from source id, address, and free-form notes.
     /// </summary>
