@@ -325,11 +325,15 @@ internal static class CanonicalContactMapper
 
     private static string PhoneValue(CanonicalPhoneDto phone)
     {
+        var raw = Clean(phone.Raw);
+        if (!string.IsNullOrWhiteSpace(raw))
+            return raw;
+
         var e164 = Clean(phone.E164);
         if (!string.IsNullOrWhiteSpace(e164))
             return e164;
 
-        return Clean(phone.Raw);
+        return string.Empty;
     }
 
     private static string PhoneDigits(string value)

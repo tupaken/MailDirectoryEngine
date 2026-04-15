@@ -10,27 +10,24 @@ internal sealed class PostgresContactStore : IContactStore
     private readonly NpgsqlDataSource _dataSource;
 
     public PostgresContactStore(NpgsqlDataSource dataSource)=> _dataSource = dataSource;
-    public async Task<bool> ExistsAsync(ContactDto dto, CancellationToken ct)
+    public async Task<string?> ExistsAsync(ContactDto dto, CancellationToken ct)
     {
         const string sql = """" 
-            SELECT EXISTS (
-                SELECT 1
-                FROM contacts c
-                WHERE
-                    (@email IS NOT NULL AND c.email IS NOT NULL AND c.email = @email)
-                    OR ((@business_phone IS NOT NULL AND c.business_phone IS NOT NULL AND c.business_phone = @business_phone) 
-                        AND @display_name = c.display_name)
-                    OR ((@mobile_phone IS NOT NULL AND c.mobile_phone IS NOT NULL AND c.mobile_phone = @mobile_phone)
-                        AND @display_name = c.display_name)
-                    OR ((@home_phone IS NOT NULL AND c.home_phone IS NOT NULL AND c.home_phone = @home_phone)
-                        AND @display_name = c.display_name)
-                    OR
-                        c.display_name = @display_name
-
-
-            );
-
+            SELECT c.ews_id 
+            FROM contacts c
+            WHERE
+                (@email IS NOT NULL AND c.email IS NOT NULL AND c.email = @email)
+                OR ((@business_phone IS NOT NULL AND c.business_phone IS NOT NULL AND c.business_phone = @business_phone) 
+                    AND @display_name = c.display_name)
+                OR ((@mobile_phone IS NOT NULL AND c.mobile_phone IS NOT NULL AND c.mobile_phone = @mobile_phone)
+                    AND @display_name = c.display_name)
+                OR ((@home_phone IS NOT NULL AND c.home_phone IS NOT NULL AND c.home_phone = @home_phone)
+                    AND @display_name = c.display_name)
+                OR
+                    c.display_name = @display_name
+            LIMIT 1;
         """";
+
         await using var cmd = _dataSource.CreateCommand(sql);
         cmd.Parameters.Add("display_name", NpgsqlDbType.Text).Value = dto.DisplayName;
         cmd.Parameters.Add("email", NpgsqlDbType.Text).Value = (object?)dto.Email ?? DBNull.Value;
@@ -38,7 +35,8 @@ internal sealed class PostgresContactStore : IContactStore
         cmd.Parameters.Add("mobile_phone", NpgsqlDbType.Text).Value = (object?)dto.MobilePhone ?? DBNull.Value;
         cmd.Parameters.Add("home_phone", NpgsqlDbType.Text).Value = (object?)dto.HomePhone ?? DBNull.Value;
 
-        return (bool)(await cmd.ExecuteScalarAsync(ct) ?? false);
+        var result= await cmd.ExecuteScalarAsync(ct);
+        return result as string;
     }
 
     public async Task<long> InsertAsync(ContactDto dto, string ewsId ,string? sourceMessageId, CancellationToken ct)

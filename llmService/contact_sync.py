@@ -60,6 +60,35 @@ def _normalize_phone_e164(phone_value: str) -> str:
     return ""
 
 
+def _format_phone_display(phone_value: str) -> str:
+    """Format German numbers into the shared display standard."""
+
+    raw = _clean_text(phone_value)
+    if not raw:
+        return ""
+
+    digits = _phone_digits(raw)
+    if not digits:
+        return ""
+
+    national_digits = ""
+    if raw.startswith("+") and digits.startswith("49"):
+        national_digits = digits[2:]
+    elif raw.startswith("00") and digits.startswith("0049"):
+        national_digits = digits[4:]
+    elif raw.startswith("0"):
+        national_digits = digits[1:]
+
+    if not national_digits:
+        return raw
+
+    prefix = national_digits[:3]
+    rest = national_digits[3:]
+    if rest:
+        return f"+49 {prefix} {rest}"
+    return f"+49 {prefix}"
+
+
 def _phone_digits(value: str) -> str:
     """Return numeric-only representation for deduplication."""
 
@@ -301,11 +330,12 @@ def _build_phone_items(contact: dict, source_text: str) -> list[dict[str, str]]:
 
     phone_items: list[dict[str, str]] = []
     for phone_type, raw in deduped:
+        display_raw = _format_phone_display(raw)
         item: dict[str, str] = {
             "type": phone_type,
-            "raw": raw,
+            "raw": display_raw,
         }
-        phone_e164 = _normalize_phone_e164(raw)
+        phone_e164 = _normalize_phone_e164(display_raw)
         if phone_e164:
             item["e164"] = phone_e164
         phone_items.append(item)

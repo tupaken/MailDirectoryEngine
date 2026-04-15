@@ -197,8 +197,14 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         var contact = new Contact(_service);
         MapToEwsContact(contact, dto);
 
-        if (await _contactStore.ExistsAsync(dto, ct).ConfigureAwait(false))
-            return;
+        string? ex = await _contactStore.ExistsAsync(dto, ct);
+
+        if (ex!=null)
+        {       
+                //TODO: contacts update or merge leer fields 
+                Console.WriteLine("\ncontact exists\n"+ex+"\n");
+                return;
+        }
 
         await System.Threading.Tasks.Task.Run(() =>
         {
