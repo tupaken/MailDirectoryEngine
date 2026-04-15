@@ -9,7 +9,7 @@ internal static class CanonicalContactMapper
     /// Maps a canonical contact envelope to the internal contact DTO used by the EWS layer.
     /// </summary>
     /// <param name="payload">Canonical payload to map.</param>
-    /// <returns>Mapped contact DTO with normalized names, phones, and notes.</returns>
+    /// <returns>Mapped contact DTO with normalized names, display-oriented phones, and notes.</returns>
     public static ContactDto ToContactDto(CanonicalContactEnvelopeDto payload)
     {
         var contact = payload.Contact;
@@ -325,6 +325,7 @@ internal static class CanonicalContactMapper
 
     private static string PhoneValue(CanonicalPhoneDto phone)
     {
+        // Prefer the human-readable raw value now that llmService normalizes it to the shared display format.
         var raw = Clean(phone.Raw);
         if (!string.IsNullOrWhiteSpace(raw))
             return raw;

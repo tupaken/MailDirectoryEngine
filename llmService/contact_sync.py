@@ -1,4 +1,9 @@
-"""Canonical contact payload + HTTP client for ContactService integration."""
+"""Canonical contact payload + HTTP client for ContactService integration.
+
+Phone numbers are emitted in two parallel forms:
+- ``raw`` keeps a human-readable display format.
+- ``e164`` keeps a machine-friendly international representation when available.
+"""
 
 import json
 import os
@@ -43,7 +48,7 @@ def _split_name(full_name: str) -> tuple[str, str]:
 
 
 def _normalize_phone_e164(phone_value: str) -> str:
-    """Best-effort normalization to an E.164-like string."""
+    """Best-effort normalization to a digits-only E.164-like string."""
 
     raw = _clean_text(phone_value)
     if not raw:
@@ -61,7 +66,7 @@ def _normalize_phone_e164(phone_value: str) -> str:
 
 
 def _format_phone_display(phone_value: str) -> str:
-    """Format German numbers into the shared display standard."""
+    """Format German numbers as ``+49 XXX REST`` while keeping foreign numbers unchanged."""
 
     raw = _clean_text(phone_value)
     if not raw:
@@ -323,7 +328,7 @@ def _dedupe_phone_candidates(candidates: list[tuple[str, str]]) -> list[tuple[st
 
 
 def _build_phone_items(contact: dict, source_text: str) -> list[dict[str, str]]:
-    """Build canonical phone objects from contact and source text candidates."""
+    """Build canonical phone objects with display-formatted ``raw`` and optional ``e164``."""
 
     candidates = _collect_phone_candidates(contact, source_text)
     deduped = _dedupe_phone_candidates(candidates)

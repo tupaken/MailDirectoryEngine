@@ -69,6 +69,47 @@ Zentrale: +49 30 123458
     assert {"type": "business", "raw": "+49 301 23458", "e164": "+4930123458"} in phones
 
 
+def test_build_canonical_contact_payload_formats_0049_and_e164_phone_sources(monkeypatch):
+    """German numbers from 0049 and e164 inputs should use the shared raw display format."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Robin Beispiel",
+            "phone": "0049 151 111222",
+            "phone_numbers": [
+                {"type": "mobile", "e164": "+491701234567"},
+            ],
+        },
+        source_message_id=8,
+    )
+
+    phones = payload["contact"]["phones"]
+    assert {"type": "business", "raw": "+49 151 111222", "e164": "+49151111222"} in phones
+    assert {"type": "mobile", "raw": "+49 170 1234567", "e164": "+491701234567"} in phones
+
+
+def test_build_canonical_contact_payload_keeps_non_german_international_display(monkeypatch):
+    """Non-German international numbers should keep their original raw display text."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Robin Beispiel",
+            "phone": "+43 1 2345678",
+        },
+        source_message_id=10,
+    )
+
+    assert payload["contact"]["phones"] == [
+        {"type": "business", "raw": "+43 1 2345678", "e164": "+4312345678"}
+    ]
+
+
 def test_build_canonical_contact_payload_ignores_glued_long_phone_numbers(monkeypatch):
     """Unreasonably long digit strings from source text must be filtered out."""
 
