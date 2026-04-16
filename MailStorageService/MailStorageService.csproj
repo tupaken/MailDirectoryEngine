@@ -6,4 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="MailStorageService.Tests\**\*.cs" />
+    <Content Remove="MailStorageService.Tests\**\*" />
+    <EmbeddedResource Remove="MailStorageService.Tests\**\*" />
+    <None Remove="MailStorageService.Tests\**\*" />
+  </ItemGroup>
+
 </Project>
