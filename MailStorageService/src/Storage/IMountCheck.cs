@@ -1,6 +1,7 @@
 namespace MailStorageService.Storage;
 
-public interface IMountCheck
+internal interface IMountCheck
 {
-    bool IsMounted(string path);
+    bool IsMounted();
+    bool Mount(); 
 }

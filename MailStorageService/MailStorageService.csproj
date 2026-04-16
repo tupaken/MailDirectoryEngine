@@ -11,6 +11,7 @@
     <Content Remove="MailStorageService.Tests\**\*" />
     <EmbeddedResource Remove="MailStorageService.Tests\**\*" />
     <None Remove="MailStorageService.Tests\**\*" />
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
   </ItemGroup>
 
 </Project>
