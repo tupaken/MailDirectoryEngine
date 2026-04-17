@@ -57,7 +57,7 @@ internal sealed class MountCheck : IMountCheck
         return process.ExitCode == 0;
     }
 
-    private static Process StartProcess(string filename,string arguments)
+    public static Process StartProcess(string filename,string arguments)
     {
         var psi = new ProcessStartInfo
         {
