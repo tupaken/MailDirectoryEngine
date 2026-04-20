@@ -47,6 +47,27 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  storageservice:
+    build:
+      context: ./MailStorageService
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_URLS: http://+:5001
+      MOUNT_PATH: /mounted-share
+      UID: "0"
+      GID: "0"
+      STORAGE_SKIP_MOUNT: ${STORAGE_SKIP_MOUNT:-false}
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./mail-export:/mail-export:ro
+    restart: unless-stopped
+
   mailparsing:
     build:
       context: ./MailParsing

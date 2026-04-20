@@ -1,0 +1,5 @@
+bin
+obj
+MailStorageService.Tests/bin
+MailStorageService.Tests/obj
+.env

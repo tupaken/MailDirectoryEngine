@@ -1,10 +1,6 @@
-
-
 using System;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
-using Microsoft.AspNetCore.Routing.Constraints;
 
 namespace MailStorageService.Storage;
 
@@ -14,17 +10,19 @@ internal sealed class StorageEngine
     private readonly string MountPath;
     private readonly string Directory2;
     private readonly string Directory3;
+
     public StorageEngine()
     {
-        this.Check= new MountCheck();
-        this.MountPath= Environment.GetEnvironmentVariable("MOUNT_PATH")
-            ?? throw new InvalidOperationException ("MOUNT_PATH is missing from the .env file");
-        this.Directory2=Environment.GetEnvironmentVariable("DIRECTORY2")
-            ?? throw new InvalidOperationException ("DIRECTORY2 is missing from the .env file");
-        this.Directory3=Environment.GetEnvironmentVariable("DIRECTORY3")
+        this.Check = new MountCheck();
+        this.MountPath = Environment.GetEnvironmentVariable("MOUNT_PATH")
+            ?? throw new InvalidOperationException("MOUNT_PATH is missing from the .env file");
+        this.Directory2 = Environment.GetEnvironmentVariable("DIRECTORY2")
+            ?? throw new InvalidOperationException("DIRECTORY2 is missing from the .env file");
+        this.Directory3 = Environment.GetEnvironmentVariable("DIRECTORY3")
             ?? throw new InvalidOperationException("DIRECTORY3 is missing from .env file");
     }
-    public bool Store(string SourcePath,string Number)
+
+    public bool Store(string SourcePath, string Number)
     {
         var isMounted = this.Check.IsMounted();
 
@@ -36,56 +34,60 @@ internal sealed class StorageEngine
             {
                 this.Check.Mount();
                 isMounted = this.Check.IsMounted();
-
-                if (isMounted)
-                    i=maxMountRetries+1;
                 Thread.Sleep(1000);
             }
 
             if (!isMounted)
+            {
                 return false;
+            }
         }
 
-        var DestinationPath= FindPath(Number);
-        
-        if (DestinationPath==null)
-            return false;
+        var destinationPath = FindPath(Number);
 
-        if (CopyWithRsync(SourcePath,DestinationPath)==0)
+        if (destinationPath == null)
+        {
+            return false;
+        }
+
+        if (CopyWithRsync(SourcePath, destinationPath) == 0)
+        {
             return true;
-        
-        return CopyWithRetry(SourcePath,DestinationPath);
+        }
+
+        return CopyWithRetry(SourcePath, destinationPath);
     }
 
-    private int CopyWithRsync(string SourcePath,string DestinationPath)
-    {   
-        string FileName="rsync";
-        string Arguments=$"-av --partial --inplace \"{SourcePath}\" \"{DestinationPath}\"";
-        using var process = MountCheck.StartProcess(FileName,Arguments);
+    private int CopyWithRsync(string SourcePath, string DestinationPath)
+    {
+        const string fileName = "rsync";
+        string arguments = $"-av --partial --inplace \"{SourcePath}\" \"{DestinationPath}\"";
+        using var process = MountCheck.StartProcess(fileName, arguments);
 
         process.WaitForExit();
 
         return process.ExitCode;
     }
 
-    private bool CopyWithRetry(string SourcePath,string DestinationPath)
+    private bool CopyWithRetry(string SourcePath, string DestinationPath)
     {
-        int maxRetries = 5;
+        const int maxRetries = 5;
 
         for (int i = 1; i <= maxRetries; i++)
         {
             Console.WriteLine($"Try {i}");
 
-            if (CopyWithRsync(SourcePath,DestinationPath)==0)
-                {
-                    Console.WriteLine("✅ Copying successful");
-                    return true;
-                }
-            
-            Console.WriteLine("❌ Error – please wait and try again...");
+            if (CopyWithRsync(SourcePath, DestinationPath) == 0)
+            {
+                Console.WriteLine("Copying successful");
+                return true;
+            }
+
+            Console.WriteLine("Copy failed, retrying...");
             Thread.Sleep(5000);
-        }       
-        Console.WriteLine("🚨 Failed completely");
+        }
+
+        Console.WriteLine("Copy failed completely");
         return false;
     }
 
@@ -98,19 +100,24 @@ internal sealed class StorageEngine
             var d2 = Directory.EnumerateDirectories(d1, $"*{this.Directory2}*", SearchOption.AllDirectories)
                 .FirstOrDefault();
 
-            if (d2 == null) continue;
+            if (d2 == null)
+            {
+                continue;
+            }
 
             var d3 = Directory.EnumerateDirectories(d2, "*", SearchOption.AllDirectories)
                 .FirstOrDefault(x => Normalize(Path.GetFileName(x)).Contains(Normalize(this.Directory3)));
 
             if (d3 != null)
-                return d3; 
+            {
+                return d3;
+            }
         }
 
         return null;
     }
 
-    static string Normalize(string input)
+    private static string Normalize(string input)
     {
         return new string(
             input
