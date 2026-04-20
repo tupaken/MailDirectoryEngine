@@ -2,4 +2,6 @@
   <Project Path="MailDirectoryEngine.csproj" />
   <Project Path="MailDirectoryEngine.Tests/MailDirectoryEngine.Tests.csproj" />
   <Project Path="../ContactService/ContactsService.csproj" />
+  <Project Path="../MailStorageService/MailStorageService.csproj" />
+  <Project Path="../MailStorageService/MailStorageService.Tests/MailStorageService.Tests.csproj" />
 </Solution>

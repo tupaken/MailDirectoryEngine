@@ -87,7 +87,7 @@ Canonical ingest payload example:
 
 ## Run Full Stack With Docker Compose
 
-Start all services (PostgreSQL, migration, MailParsing, ContactService, llmService, Adminer, Ollama):
+Start all services (PostgreSQL, migration, MailParsing, ContactService, MailStorageService, llmService, Adminer, Ollama):
 
 ```powershell
 docker compose up -d --build
@@ -96,7 +96,7 @@ docker compose up -d --build
 Watch logs:
 
 ```powershell
-docker compose logs -f mailparsing llmservice contactservice
+docker compose logs -f mailparsing llmservice contactservice storageservice
 ```
 
 Stop everything:
@@ -109,8 +109,14 @@ Notes:
 - Inside Compose, service-to-service URLs are preconfigured:
   - PostgreSQL host: `postgres`
   - Contact API: `http://contactservice:5000/api/contacts/canonical`
+  - Storage API: `http://storageservice:5001/store`
   - Ollama: `http://ollama:11434`
 - Mail exports are written to `./mail-export` on the host.
+- `storageservice` mounts the SMB/CIFS share itself inside the container at `/mounted-share`.
+- Compose runs `storageservice` with elevated mount permissions so `mount -t cifs ...` can work.
+- To disable self-mount and use an already-mounted path instead, set `STORAGE_SKIP_MOUNT=true` and provide a bind mount yourself.
+- Requests to `POST /store` must use container-visible paths such as `/mail-export/<file>.eml`, not Windows host paths like `C:\...`.
+- `MOUNT_PATH` means local mount target, `SHARE_PATH` means remote SMB path.
 
 ## IMAP Configuration
 
