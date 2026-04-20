@@ -1,4 +1,5 @@
 using DotNetEnv;
+using MailStorageService.Api.Endpoints;
 using MailStorageService.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,20 +10,15 @@ if (File.Exists(envPath))
     Env.Load(envPath);
 }
 
+builder.Services.AddSingleton<IStorageEngine, StorageEngine>();
+
 var app = builder.Build();
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
-
-app.MapPost("/store", (StoreRequest request) =>
-{
-    var storageEngine = new StorageEngine();
-    var success = storageEngine.Store(request.SourcePath, request.Number);
-
-    return success
-        ? Results.Ok(new { message = "200" })
-        : Results.BadRequest(new { message = "400" });
-});
+app.MapStorageEndpoints();
 
 app.Run();
 
-internal sealed record StoreRequest(string SourcePath, string Number);
+/// <summary>
+/// Entry point for the mail storage HTTP service.
+/// </summary>
+public partial class Program;

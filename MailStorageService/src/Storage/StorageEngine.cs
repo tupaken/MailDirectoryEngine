@@ -1,30 +1,51 @@
-using System;
-using System.IO;
-using System.Linq;
-
 namespace MailStorageService.Storage;
 
-internal sealed class StorageEngine
+/// <summary>
+/// Resolves the destination directory on the mounted share and copies exported mail files into it.
+/// </summary>
+internal sealed class StorageEngine : IStorageEngine
 {
-    private readonly MountCheck Check;
-    private readonly string MountPath;
-    private readonly string Directory2;
-    private readonly string Directory3;
+    private readonly IMountCheck check;
+    private readonly string mountPath;
+    private readonly string directory2;
+    private readonly string directory3;
+    private readonly Func<string, string, int> copyWithRsync;
+    private readonly Action<TimeSpan> delay;
 
+    /// <summary>
+    /// Initializes storage settings from environment variables.
+    /// </summary>
     public StorageEngine()
+        : this(
+            check: new MountCheck(),
+            mountPath: GetRequiredEnvironmentVariable("MOUNT_PATH"),
+            directory2: GetRequiredEnvironmentVariable("DIRECTORY2"),
+            directory3: GetRequiredEnvironmentVariable("DIRECTORY3"),
+            copyWithRsync: DefaultCopyWithRsync,
+            delay: static duration => Thread.Sleep(duration))
     {
-        this.Check = new MountCheck();
-        this.MountPath = Environment.GetEnvironmentVariable("MOUNT_PATH")
-            ?? throw new InvalidOperationException("MOUNT_PATH is missing from the .env file");
-        this.Directory2 = Environment.GetEnvironmentVariable("DIRECTORY2")
-            ?? throw new InvalidOperationException("DIRECTORY2 is missing from the .env file");
-        this.Directory3 = Environment.GetEnvironmentVariable("DIRECTORY3")
-            ?? throw new InvalidOperationException("DIRECTORY3 is missing from .env file");
     }
 
-    public bool Store(string SourcePath, string Number)
+    internal StorageEngine(
+        IMountCheck check,
+        string mountPath,
+        string directory2,
+        string directory3,
+        Func<string, string, int>? copyWithRsync = null,
+        Action<TimeSpan>? delay = null)
     {
-        var isMounted = this.Check.IsMounted();
+        this.check = check ?? throw new ArgumentNullException(nameof(check));
+        this.mountPath = ValidateRequiredValue(mountPath, "MOUNT_PATH");
+        this.directory2 = ValidateRequiredValue(directory2, "DIRECTORY2");
+        this.directory3 = ValidateRequiredValue(directory3, "DIRECTORY3");
+        this.copyWithRsync = copyWithRsync ?? DefaultCopyWithRsync;
+        this.delay = delay ?? (static duration => Thread.Sleep(duration));
+    }
+
+    /// <inheritdoc />
+    public bool Store(string sourcePath, string number)
+    {
+        var isMounted = this.check.IsMounted();
 
         if (!isMounted)
         {
@@ -32,9 +53,9 @@ internal sealed class StorageEngine
 
             for (int i = 0; i < maxMountRetries && !isMounted; i++)
             {
-                this.Check.Mount();
-                isMounted = this.Check.IsMounted();
-                Thread.Sleep(1000);
+                this.check.Mount();
+                isMounted = this.check.IsMounted();
+                this.delay(TimeSpan.FromSeconds(1));
             }
 
             if (!isMounted)
@@ -43,61 +64,33 @@ internal sealed class StorageEngine
             }
         }
 
-        var destinationPath = FindPath(Number);
+        var destinationPath = this.FindPath(number);
 
         if (destinationPath == null)
         {
             return false;
         }
 
-        if (CopyWithRsync(SourcePath, destinationPath) == 0)
+        if (this.copyWithRsync(sourcePath, destinationPath) == 0)
         {
             return true;
         }
 
-        return CopyWithRetry(SourcePath, destinationPath);
+        return CopyWithRetry(sourcePath, destinationPath);
     }
 
-    private int CopyWithRsync(string SourcePath, string DestinationPath)
+    /// <summary>
+    /// Finds the final destination directory for the given case number.
+    /// </summary>
+    /// <param name="number">The case number prefix used at the top-level share folder.</param>
+    /// <returns>The resolved destination path, or <see langword="null" /> when no match exists.</returns>
+    internal string? FindPath(string number)
     {
-        const string fileName = "rsync";
-        string arguments = $"-av --partial --inplace \"{SourcePath}\" \"{DestinationPath}\"";
-        using var process = MountCheck.StartProcess(fileName, arguments);
-
-        process.WaitForExit();
-
-        return process.ExitCode;
-    }
-
-    private bool CopyWithRetry(string SourcePath, string DestinationPath)
-    {
-        const int maxRetries = 5;
-
-        for (int i = 1; i <= maxRetries; i++)
-        {
-            Console.WriteLine($"Try {i}");
-
-            if (CopyWithRsync(SourcePath, DestinationPath) == 0)
-            {
-                Console.WriteLine("Copying successful");
-                return true;
-            }
-
-            Console.WriteLine("Copy failed, retrying...");
-            Thread.Sleep(5000);
-        }
-
-        Console.WriteLine("Copy failed completely");
-        return false;
-    }
-
-    private string? FindPath(string number)
-    {
-        var level1 = Directory.EnumerateDirectories(this.MountPath, number + "*");
+        var level1 = Directory.EnumerateDirectories(this.mountPath, number + "*");
 
         foreach (var d1 in level1)
         {
-            var d2 = Directory.EnumerateDirectories(d1, $"*{this.Directory2}*", SearchOption.AllDirectories)
+            var d2 = Directory.EnumerateDirectories(d1, $"*{this.directory2}*", SearchOption.AllDirectories)
                 .FirstOrDefault();
 
             if (d2 == null)
@@ -106,7 +99,7 @@ internal sealed class StorageEngine
             }
 
             var d3 = Directory.EnumerateDirectories(d2, "*", SearchOption.AllDirectories)
-                .FirstOrDefault(x => Normalize(Path.GetFileName(x)).Contains(Normalize(this.Directory3)));
+                .FirstOrDefault(path => Normalize(Path.GetFileName(path)).Contains(Normalize(this.directory3)));
 
             if (d3 != null)
             {
@@ -115,6 +108,54 @@ internal sealed class StorageEngine
         }
 
         return null;
+    }
+
+    private static int DefaultCopyWithRsync(string sourcePath, string destinationPath)
+    {
+        return MountCheck.RunProcess(
+            "rsync",
+            $"-av --partial --inplace \"{sourcePath}\" \"{destinationPath}\"");
+    }
+
+    private bool CopyWithRetry(string sourcePath, string destinationPath)
+    {
+        const int maxRetries = 5;
+
+        for (int i = 1; i <= maxRetries; i++)
+        {
+            Console.WriteLine($"Try {i}");
+
+            if (this.copyWithRsync(sourcePath, destinationPath) == 0)
+            {
+                Console.WriteLine("Copying successful");
+                return true;
+            }
+
+            Console.WriteLine("Copy failed, retrying...");
+            this.delay(TimeSpan.FromSeconds(5));
+        }
+
+        Console.WriteLine("Copy failed completely");
+        return false;
+    }
+
+    private static string GetRequiredEnvironmentVariable(string name)
+    {
+        return ValidateRequiredValue(
+            Environment.GetEnvironmentVariable(name),
+            name);
+    }
+
+    private static string ValidateRequiredValue(string? value, string name)
+    {
+        var normalized = value?.Trim();
+
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException($"{name} is missing from the environment");
+        }
+
+        return normalized;
     }
 
     private static string Normalize(string input)
