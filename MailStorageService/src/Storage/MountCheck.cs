@@ -39,7 +39,7 @@ internal sealed class MountCheck : IMountCheck
     }
     public bool IsMounted()
     {
-        var process = StartProcess("mountpoint",$"-q,{this.MountPath}");
+        var process = StartProcess("mountpoint",$"-q {this.MountPath}");
         
         process!.WaitForExit();
         
