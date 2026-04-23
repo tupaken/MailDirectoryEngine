@@ -1,9 +1,11 @@
 """Application entry point for the Python inbox post-processing worker."""
 
+from .API.StorageService import send_storage_payload
 from .DB.DBadapter import DB_adapter
-from .HTMLClean.htmlCleaner import html_to_text
+from .HTMLClean.htmlCleaner import html_to_text,subject_from_send
 from .LLM.Connection import DISPOSITION_IRRELEVANT, llm_connection_with_disposition
 from .contact_sync import build_canonical_contact_payload, send_canonical_contact_payload
+from .LLM.sent_analyze import prj_number_extraction
 
 
 def _normalize_contacts(value: object) -> list[dict]:
@@ -38,36 +40,58 @@ def main() -> None:
     db = DB_adapter()
     while True:
         messages = db.get_new_messages_inbox()
-        if len(messages) == 0:
-            continue
+        sent_messages = db.get_new_messages_sent()
 
-        for message in messages:
-            try:
-                text = html_to_text(message.content or "")
-                decision = llm_connection_with_disposition(text)
-                contacts = _normalize_contacts(decision.get("contacts"))
-                disposition = decision.get("disposition")
-                disposition_label = (
-                    disposition
-                    if isinstance(disposition, str) and disposition.strip()
-                    else "unknown"
-                )
+        if sent_messages:
+            save_sent(db, sent_messages)
 
-                if contacts:
-                    _sync_contacts(message.id, contacts, text)
-                    db.mark_operated("Inbox", message.id)
-                    continue
+        if messages:
+            contact_sync(db, messages)
 
-                if disposition_label == DISPOSITION_IRRELEVANT:
-                    db.mark_operated("Inbox", message.id)
-                    print(f"Message {message.id} marked operated: irrelevant")
-                    continue
 
-                print(f"Message {message.id} left unoperated: no clear decision ({disposition_label})")
 
-            except Exception as exc:
-                print(f"Message {message.id} failed: {exc}")
+def contact_sync(db:DB_adapter,messages:list):
+    for message in messages:
+        try:
+            text = html_to_text(message.content or "")
+            decision = llm_connection_with_disposition(text)
+            contacts = _normalize_contacts(decision.get("contacts"))
+            disposition = decision.get("disposition")
+            disposition_label = (
+                disposition
+                if isinstance(disposition, str) and disposition.strip()
+                else "unknown"
+            )
 
+            if contacts:
+                _sync_contacts(message.id, contacts, text)
+                db.mark_operated("Inbox", message.id)
+                continue
+
+            if disposition_label == DISPOSITION_IRRELEVANT:
+                db.mark_operated("Inbox", message.id)
+                print(f"Message {message.id} marked operated: irrelevant")
+                continue
+
+            print(f"Message {message.id} left unoperated: no clear decision ({disposition_label})")
+
+        except Exception as exc:
+            print(f"Message {message.id} failed: {exc}")
+
+def save_sent(db:DB_adapter,sent_messages):
+    for message in sent_messages:
+        try:
+            sbj = subject_from_send(message.path)
+            nmb = prj_number_extraction(sbj)
+
+            if not nmb:
+                db.mark_operated("Sent", message.id)
+                continue
+
+            send_storage_payload(message.path, nmb)
+            db.mark_operated("Sent", message.id)
+        except Exception as exc:
+            print(f"Sent message {message.id} failed: {exc}")
 
 if __name__ == "__main__":
     main()
