@@ -96,6 +96,9 @@ services:
       POSTGRES_PORT: "5432"
       LLM_ENDPOINT: http://ollama:11434
       CONTACT_SERVICE_ENDPOINT: http://contactservice:5000/api/contacts/canonical
+      STORAGE_SERVICE_ENDPOINT: http://storageservice:5001/store
+    volumes:
+      - ./mail-export:/mail-export:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

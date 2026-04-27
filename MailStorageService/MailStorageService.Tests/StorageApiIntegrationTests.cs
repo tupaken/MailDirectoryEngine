@@ -17,7 +17,7 @@ public class StorageApiIntegrationTests
     [Fact]
     public async Task PostStore_ReturnsOk_WhenJsonBodyUsesSourcePath()
     {
-        await using var factory = new StorageApiFactory(new FakeStorageEngine(true));
+        await using var factory = new StorageApiFactory(new FakeStorageEngine(StoreStatus.Success));
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
