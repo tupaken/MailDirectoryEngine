@@ -1,14 +1,16 @@
+"""Helpers for extracting project numbers from sent-mail subjects."""
+
 import re
 
-def prj_number_extraction(subject:str)->str:
-    
-    PATTERN_PRJ_NUMBER=(re.compile(r"^\s*(\d{2}(-|\s)\d{3})"))
 
-    m=PATTERN_PRJ_NUMBER.search(subject)
-    
+def prj_number_extraction(subject: str) -> str | None:
+    """Extract a leading `NN-NNN` style project number from a subject."""
+
+    pattern_prj_number = re.compile(r"^\s*(\d{2}(-|\s)\d{3})")
+
+    m = pattern_prj_number.search(subject)
+
     if not m:
         return None
 
-    return m.group(0).replace(" ","-")
-
-prj_number_extraction("11 011TEstnewregex")
+    return m.group(1).replace(" ", "-")

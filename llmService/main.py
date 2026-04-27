@@ -2,7 +2,7 @@
 
 from .API.StorageService import send_storage_payload
 from .DB.DBadapter import DB_adapter
-from .HTMLClean.htmlCleaner import html_to_text,subject_from_send
+from .HTMLClean.htmlCleaner import html_to_text, subject_from_send
 from .LLM.Connection import DISPOSITION_IRRELEVANT, llm_connection_with_disposition
 from .contact_sync import build_canonical_contact_payload, send_canonical_contact_payload
 from .LLM.sent_analyze import prj_number_extraction
@@ -49,8 +49,9 @@ def main() -> None:
             contact_sync(db, messages)
 
 
+def contact_sync(db: DB_adapter, messages: list) -> None:
+    """Process inbox messages for contact extraction and persistence."""
 
-def contact_sync(db:DB_adapter,messages:list):
     for message in messages:
         try:
             text = html_to_text(message.content or "")
@@ -78,7 +79,10 @@ def contact_sync(db:DB_adapter,messages:list):
         except Exception as exc:
             print(f"Message {message.id} failed: {exc}")
 
-def save_sent(db:DB_adapter,sent_messages):
+
+def save_sent(db: DB_adapter, sent_messages: list) -> None:
+    """Forward sent-message files to StorageService and mark handled rows."""
+
     for message in sent_messages:
         try:
             sbj = subject_from_send(message.path)
@@ -92,6 +96,7 @@ def save_sent(db:DB_adapter,sent_messages):
             db.mark_operated("Sent", message.id)
         except Exception as exc:
             print(f"Sent message {message.id} failed: {exc}")
+
 
 if __name__ == "__main__":
     main()
