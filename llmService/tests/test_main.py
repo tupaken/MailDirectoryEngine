@@ -70,6 +70,7 @@ def test_main_leaves_unknown_messages_unoperated(monkeypatch):
     decision_mock = Mock(return_value={"contacts": [], "disposition": "unknown"})
     sync_mock = Mock()
     print_mock = Mock()
+    fake_db.record_unknown_result.return_value = 1
 
     monkeypatch.setattr(main_module, "DB_adapter", db_adapter_cls)
     monkeypatch.setattr(main_module, "html_to_text", html_to_text_mock)
@@ -82,7 +83,45 @@ def test_main_leaves_unknown_messages_unoperated(monkeypatch):
 
     sync_mock.assert_not_called()
     fake_db.mark_operated.assert_not_called()
-    assert call("Message 7 left unoperated: no clear decision (unknown)") in print_mock.mock_calls
+    fake_db.record_unknown_result.assert_called_once_with(7, "unknown")
+    assert (
+        call("Message 7 left unoperated: no clear decision (unknown), retry 1/3")
+        in print_mock.mock_calls
+    )
+
+
+def test_main_marks_unknown_message_operated_after_third_matching_result(monkeypatch):
+    """The third matching unknown result should be treated as final."""
+
+    fake_db = Mock()
+    fake_db.get_new_messages_inbox.side_effect = [
+        [Message(id=8, content="<p>Unknown</p>")],
+        KeyboardInterrupt(),
+    ]
+    fake_db.get_new_messages_sent.return_value = []
+    fake_db.record_unknown_result.return_value = 3
+    db_adapter_cls = Mock(return_value=fake_db)
+    html_to_text_mock = Mock(return_value="Unknown")
+    decision_mock = Mock(return_value={"contacts": [], "disposition": "unknown"})
+    sync_mock = Mock()
+    print_mock = Mock()
+
+    monkeypatch.setattr(main_module, "DB_adapter", db_adapter_cls)
+    monkeypatch.setattr(main_module, "html_to_text", html_to_text_mock)
+    monkeypatch.setattr(main_module, "llm_connection_with_disposition", decision_mock)
+    monkeypatch.setattr(main_module, "_sync_contacts", sync_mock)
+    monkeypatch.setattr(builtins, "print", print_mock)
+
+    with pytest.raises(KeyboardInterrupt):
+        main_module.main()
+
+    sync_mock.assert_not_called()
+    fake_db.record_unknown_result.assert_called_once_with(8, "unknown")
+    fake_db.mark_operated.assert_not_called()
+    assert (
+        call("Message 8 marked operated: no clear decision 3 times (unknown)")
+        in print_mock.mock_calls
+    )
 
 
 def test_main_skips_processing_when_no_messages(monkeypatch):
