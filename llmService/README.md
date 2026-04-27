@@ -9,8 +9,9 @@ Python worker for inbox post-processing:
 - sends contacts to `ContactService` (`POST /api/contacts/canonical`)
 - marks inbox rows as `operated = true` only when:
   - contact sync to `ContactService` succeeded, or
-  - LLM explicitly returned `is_allowed = false` (irrelevant mail)
-- leaves rows unmarked for unclear/failed decisions, so they are retried
+  - the LLM explicitly returned `is_allowed = false` (irrelevant mail), or
+  - the same unclear result was observed three times in a row
+- retries unclear decisions while tracking repeated result signatures in the inbox table
 - reads unprocessed sent rows from PostgreSQL (`e_mails_send.operated = false`)
 - loads the exported `.eml` file, extracts the `Subject`, and parses a leading project number
 - forwards matching sent files to `StorageService` with `sourcePath` + `number`
@@ -29,7 +30,9 @@ Python worker for inbox post-processing:
 - Marking behavior:
   - `relevant` + successful sync -> row is marked operated.
   - `irrelevant` (`is_allowed = false`) -> row is marked operated.
-  - `unknown` or sync error -> row stays unmarked and is retried.
+  - `unknown` -> row stays unmarked until the same result signature was seen three times; the third matching retry marks the row operated.
+  - sync error -> row stays unmarked and is retried.
+- Inbox retry tracking is persisted in `e_mails_inbox.same_result_count` and `e_mails_inbox.last_result_signature` (migration `V6__inbox_same_count.sql`).
 - Every synced contact is mapped to the shared canonical schema (`schema_version = "1.0"`) and posted to `ContactService`.
 
 ## Sent Mail Processing
@@ -47,7 +50,7 @@ Python worker for inbox post-processing:
 
 - `phone` is mandatory for allowed results.
 - If `phone` exists, `full_name` must be present.
-- `full_name` is rejected when it is role-based (for example Geschäftsführer/CEO/Inhaber/Vorstand/GF context).
+- `full_name` is rejected when it is role-based (for example Geschaeftsfuehrer/CEO/Inhaber/Vorstand/GF context).
 - Placeholder/test values (`test`, `demo`, `sample`, `dummy`, `example`) are rejected.
 - Values not present in the original mail text are removed.
 
@@ -149,7 +152,7 @@ dotnet run --project .\ContactService\ContactsService.csproj
 In another shell:
 
 ```powershell
-python -m llmService.main
+uv --project llmService run python -m llmService.main
 ```
 
 Run with Docker Compose (recommended for full pipeline):
@@ -181,3 +184,4 @@ uv --project llmService run pytest llmService/tests/test_DB_adapter.py -q
 - connection and table-reflection error wrapping
 - inbox/sent message fetch mapping to `Message`
 - `mark_operated` for `Inbox`, `Sent`, and invalid direction
+- `record_unknown_result` retry tracking for matching and changed unknown signatures

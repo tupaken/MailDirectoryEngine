@@ -7,6 +7,11 @@ namespace ContactService.Api.DependencyInjection;
 
 internal static class DatabaseRegistration
 {
+    /// <summary>
+    /// Registers PostgreSQL infrastructure used by ContactService.
+    /// </summary>
+    /// <param name="services">Service collection to extend.</param>
+    /// <returns>The same service collection for chaining.</returns>
     public static IServiceCollection AddPostgres(this IServiceCollection services)
     {
         services.AddSingleton<NpgsqlDataSource>(_ =>
@@ -26,6 +31,11 @@ internal static class DatabaseRegistration
         return services;
     }
 
+    /// <summary>
+    /// Reads one required environment variable and throws when it is missing.
+    /// </summary>
+    /// <param name="key">Environment variable name to resolve.</param>
+    /// <returns>The non-empty environment variable value.</returns>
     private static string RequireEnv(string key)
     {
         var value = Environment.GetEnvironmentVariable(key);
