@@ -11,6 +11,14 @@ Python worker for inbox post-processing:
   - contact sync to `ContactService` succeeded, or
   - LLM explicitly returned `is_allowed = false` (irrelevant mail)
 - leaves rows unmarked for unclear/failed decisions, so they are retried
+- reads unprocessed sent rows from PostgreSQL (`e_mails_send.operated = false`)
+- loads the exported `.eml` file, extracts the `Subject`, and parses a leading project number
+- forwards matching sent files to `StorageService` with `sourcePath` + `number`
+- marks sent rows as `operated = true` when:
+  - `StorageService` accepted the payload, or
+  - the mail has no `Subject`, or
+  - no leading project number is present in the subject
+- leaves sent rows unmarked only when subject parsing or storage forwarding fails unexpectedly
 
 ## Classification Output
 
@@ -23,6 +31,16 @@ Python worker for inbox post-processing:
   - `irrelevant` (`is_allowed = false`) -> row is marked operated.
   - `unknown` or sync error -> row stays unmarked and is retried.
 - Every synced contact is mapped to the shared canonical schema (`schema_version = "1.0"`) and posted to `ContactService`.
+
+## Sent Mail Processing
+
+- `save_sent(...)` processes unoperated `e_mails_send` rows before inbox work in each loop.
+- `subject_from_send(path)` reads the `Subject` header from the exported `.eml` file.
+- `prj_number_extraction(subject)` matches a leading project number in `NN-NNN` or `NN NNN` form and normalizes spaces to `-`.
+- `send_storage_payload(path, number)` posts the file path and project number to `StorageService`.
+- Missing `Subject` headers and subjects without a project number are treated as final non-actionable results and are marked operated without retry.
+- `StorageService` responses with `404 destination_not_found` are also treated as final and marked operated, because no matching destination folder exists for that project number anymore.
+- `StorageService` responses such as `404 source_not_found`, `503 share_unavailable`, or `500 copy_failed` remain retryable and leave the row unoperated.
 
 ### Validation Rules (post-processing)
 
@@ -69,6 +87,10 @@ Contact sync variables:
 - `CONTACT_SERVICE_TIMEOUT_SECONDS` (default `30`)
 - `CONTACT_SERVICE_API_KEY` (optional, forwarded as `X-Api-Key`)
 - `EWS_ACCOUNT_KEY` (default `bewerbung`, forwarded in canonical payload as `account_key`)
+
+Storage sync variables:
+- `STORAGE_SERVICE_ENDPOINT` (required for sent-mail forwarding, for example `http://localhost:5001/store`)
+- `STORAGE_SERVICE_TIMEOUT_SECONDS` (default `30`)
 
 Optional Ollama runtime variables (used by Docker Compose):
 - `OLLAMA_MODEL` (auto-pulled model, default `llama3.2:1b`)

@@ -1,6 +1,10 @@
 """Application entry point for the Python inbox post-processing worker."""
 
-from .API.StorageService import send_storage_payload
+from .API.StorageService import (
+    STORAGE_MESSAGE_DESTINATION_NOT_FOUND,
+    StorageServiceError,
+    send_storage_payload,
+)
 from .DB.DBadapter import DB_adapter
 from .HTMLClean.htmlCleaner import html_to_text, subject_from_send
 from .LLM.Connection import DISPOSITION_IRRELEVANT, llm_connection_with_disposition
@@ -86,6 +90,11 @@ def save_sent(db: DB_adapter, sent_messages: list) -> None:
     for message in sent_messages:
         try:
             sbj = subject_from_send(message.path)
+
+            if not sbj:
+                db.mark_operated("Sent", message.id)
+                continue
+
             nmb = prj_number_extraction(sbj)
 
             if not nmb:
@@ -94,6 +103,16 @@ def save_sent(db: DB_adapter, sent_messages: list) -> None:
 
             send_storage_payload(message.path, nmb)
             db.mark_operated("Sent", message.id)
+        except StorageServiceError as exc:
+            if (
+                exc.status_code == 404
+                and exc.response_message == STORAGE_MESSAGE_DESTINATION_NOT_FOUND
+            ):
+                db.mark_operated("Sent", message.id)
+                print(f"Sent message {message.id} marked operated: destination not found")
+                continue
+
+            print(f"Sent message {message.id} failed: {exc}")
         except Exception as exc:
             print(f"Sent message {message.id} failed: {exc}")
 

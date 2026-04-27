@@ -5,10 +5,10 @@ namespace MailStorageService.Tests;
 public class StorageEngineTests
 {
     /// <summary>
-    /// Verifies that storage fails after all mount retries are exhausted.
+    /// Verifies that storage reports share unavailability after all mount retries are exhausted.
     /// </summary>
     [Fact]
-    public void Store_ReturnsFalse_WhenShareCannotBeMounted()
+    public void Store_ReturnsShareUnavailable_WhenShareCannotBeMounted()
     {
         var mountCheck = new FakeMountCheck(false);
         var delayCalls = 0;
@@ -22,7 +22,7 @@ public class StorageEngineTests
 
         var result = engine.Store("/mail-export/message.eml", "12345");
 
-        Assert.False(result);
+        Assert.Equal(StoreStatus.ShareUnavailable, result);
         Assert.Equal(5, mountCheck.MountCallCount);
         Assert.Equal(5, delayCalls);
     }
@@ -38,6 +38,7 @@ public class StorageEngineTests
         try
         {
             var targetDirectory = CreateMatchingDirectoryTree(root, "12345");
+            var sourcePath = CreateSourceFile(root);
             var mountCheck = new FakeMountCheck(false, true);
             var destinations = new List<string>();
             var engine = new StorageEngine(
@@ -52,9 +53,9 @@ public class StorageEngineTests
                 },
                 delay: _ => { });
 
-            var result = engine.Store("/mail-export/message.eml", "12345");
+            var result = engine.Store(sourcePath, "12345");
 
-            Assert.True(result);
+            Assert.Equal(StoreStatus.Success, result);
             Assert.Equal(1, mountCheck.MountCallCount);
             Assert.Equal(targetDirectory, Assert.Single(destinations));
         }
@@ -65,15 +66,16 @@ public class StorageEngineTests
     }
 
     /// <summary>
-    /// Verifies that storage fails when no matching destination folder can be resolved.
+    /// Verifies that storage reports a missing destination when no matching target folder exists.
     /// </summary>
     [Fact]
-    public void Store_ReturnsFalse_WhenDestinationCannotBeResolved()
+    public void Store_ReturnsDestinationNotFound_WhenDestinationCannotBeResolved()
     {
         var root = CreateTempDirectory();
 
         try
         {
+            var sourcePath = CreateSourceFile(root);
             var engine = new StorageEngine(
                 new FakeMountCheck(true),
                 mountPath: root,
@@ -82,9 +84,38 @@ public class StorageEngineTests
                 copyWithRsync: static (_, _) => 0,
                 delay: _ => { });
 
-            var result = engine.Store("/mail-export/message.eml", "12345");
+            var result = engine.Store(sourcePath, "12345");
 
-            Assert.False(result);
+            Assert.Equal(StoreStatus.DestinationNotFound, result);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that storage reports a missing source file before destination lookup or copying.
+    /// </summary>
+    [Fact]
+    public void Store_ReturnsSourceNotFound_WhenSourceFileIsMissing()
+    {
+        var root = CreateTempDirectory();
+
+        try
+        {
+            CreateMatchingDirectoryTree(root, "12345");
+            var engine = new StorageEngine(
+                new FakeMountCheck(true),
+                mountPath: root,
+                directory2: "Dokumente",
+                directory3: "Bewerbungen",
+                copyWithRsync: static (_, _) => 0,
+                delay: _ => { });
+
+            var result = engine.Store(Path.Combine(root, "missing.eml"), "12345");
+
+            Assert.Equal(StoreStatus.SourceNotFound, result);
         }
         finally
         {
@@ -103,6 +134,7 @@ public class StorageEngineTests
         try
         {
             var targetDirectory = CreateMatchingDirectoryTree(root, "12345");
+            var tempSourcePath = CreateSourceFile(root);
             string? sourcePath = null;
             string? destinationPath = null;
             var engine = new StorageEngine(
@@ -118,10 +150,10 @@ public class StorageEngineTests
                 },
                 delay: _ => { });
 
-            var result = engine.Store("/mail-export/message.eml", "12345");
+            var result = engine.Store(tempSourcePath, "12345");
 
-            Assert.True(result);
-            Assert.Equal("/mail-export/message.eml", sourcePath);
+            Assert.Equal(StoreStatus.Success, result);
+            Assert.Equal(tempSourcePath, sourcePath);
             Assert.Equal(targetDirectory, destinationPath);
         }
         finally
@@ -141,6 +173,7 @@ public class StorageEngineTests
         try
         {
             CreateMatchingDirectoryTree(root, "12345");
+            var sourcePath = CreateSourceFile(root);
             var exitCodes = new Queue<int>(new[] { 23, 23, 0 });
             var delayCalls = 0;
             var engine = new StorageEngine(
@@ -151,9 +184,9 @@ public class StorageEngineTests
                 copyWithRsync: (_, _) => exitCodes.Dequeue(),
                 delay: _ => delayCalls++);
 
-            var result = engine.Store("/mail-export/message.eml", "12345");
+            var result = engine.Store(sourcePath, "12345");
 
-            Assert.True(result);
+            Assert.Equal(StoreStatus.Success, result);
             Assert.Empty(exitCodes);
             Assert.Equal(1, delayCalls);
         }
@@ -164,16 +197,17 @@ public class StorageEngineTests
     }
 
     /// <summary>
-    /// Verifies that storage fails after the initial rsync attempt and all retry attempts fail.
+    /// Verifies that storage reports copy failure after the initial rsync attempt and all retries fail.
     /// </summary>
     [Fact]
-    public void Store_ReturnsFalse_WhenAllCopyAttemptsFail()
+    public void Store_ReturnsCopyFailed_WhenAllCopyAttemptsFail()
     {
         var root = CreateTempDirectory();
 
         try
         {
             CreateMatchingDirectoryTree(root, "12345");
+            var sourcePath = CreateSourceFile(root);
             var attempts = 0;
             var engine = new StorageEngine(
                 new FakeMountCheck(true),
@@ -187,9 +221,9 @@ public class StorageEngineTests
                 },
                 delay: _ => { });
 
-            var result = engine.Store("/mail-export/message.eml", "12345");
+            var result = engine.Store(sourcePath, "12345");
 
-            Assert.False(result);
+            Assert.Equal(StoreStatus.CopyFailed, result);
             Assert.Equal(6, attempts);
         }
         finally
@@ -215,6 +249,13 @@ public class StorageEngineTests
         var exception = Assert.Throws<InvalidOperationException>(() => new StorageEngine());
 
         Assert.Equal("DIRECTORY3 is missing from the environment", exception.Message);
+    }
+
+    private static string CreateSourceFile(string root)
+    {
+        var path = Path.Combine(root, "message.eml");
+        File.WriteAllText(path, "mail");
+        return path;
     }
 
     private static string CreateMatchingDirectoryTree(string root, string number)

@@ -42,8 +42,9 @@ internal sealed class StorageEngine : IStorageEngine
         this.delay = delay ?? (static duration => Thread.Sleep(duration));
     }
 
+
     /// <inheritdoc />
-    public bool Store(string sourcePath, string number)
+    public StoreStatus Store(string sourcePath, string number)
     {
         var isMounted = this.check.IsMounted();
 
@@ -60,23 +61,30 @@ internal sealed class StorageEngine : IStorageEngine
 
             if (!isMounted)
             {
-                return false;
+                return StoreStatus.ShareUnavailable;
             }
+        }
+
+        if (!File.Exists(sourcePath))
+        {
+            return StoreStatus.SourceNotFound;
         }
 
         var destinationPath = this.FindPath(number);
 
         if (destinationPath == null)
         {
-            return false;
+            return StoreStatus.DestinationNotFound;
         }
 
         if (this.copyWithRsync(sourcePath, destinationPath) == 0)
         {
-            return true;
+            return StoreStatus.Success;
         }
 
-        return CopyWithRetry(sourcePath, destinationPath);
+        return CopyWithRetry(sourcePath, destinationPath)
+            ? StoreStatus.Success
+            : StoreStatus.CopyFailed;
     }
 
     /// <summary>

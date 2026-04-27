@@ -37,14 +37,14 @@ internal sealed class FakeMountCheck : IMountCheck
 
 internal sealed class FakeStorageEngine : IStorageEngine
 {
-    private readonly bool result;
+    private readonly StoreStatus result;
 
-    public FakeStorageEngine(bool result)
+    public FakeStorageEngine(StoreStatus result)
     {
         this.result = result;
     }
 
-    public bool Store(string sourcePath, string number)
+    public StoreStatus Store(string sourcePath, string number)
     {
         return this.result;
     }

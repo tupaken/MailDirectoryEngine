@@ -35,13 +35,18 @@ Successful response:
 }
 ```
 
-Failed response:
+Failed responses:
 
 ```json
 {
-  "message": "400"
+  "message": "destination_not_found"
 }
 ```
+
+- `404 Not Found` with `destination_not_found`: no destination folder matches the case number.
+- `404 Not Found` with `source_not_found`: the exported `.eml` file path does not exist inside the container.
+- `503 Service Unavailable` with `share_unavailable`: the target share could not be mounted/reached.
+- `500 Internal Server Error` with `copy_failed`: destination lookup succeeded, but copying still failed after retries.
 
 Use container-visible source paths such as `/mail-export/example.eml`. Windows host paths like `C:\mail-export\example.eml` are not valid inside the container.
 

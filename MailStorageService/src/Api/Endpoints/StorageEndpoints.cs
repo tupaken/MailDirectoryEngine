@@ -34,16 +34,34 @@ internal static class StorageEndpoints
     /// <param name="request">The request payload containing source path and case number.</param>
     /// <param name="storageEngine">The storage engine used to resolve and copy the file.</param>
     /// <returns>
-    /// An HTTP 200 response when the file was stored successfully; otherwise an HTTP 400 response.
+    /// An HTTP 200 response when the file was stored successfully; otherwise a structured
+    /// 404/503/500 response describing the failure reason.
     /// </returns>
-    internal static Results<Ok<ServiceMessageResponse>, BadRequest<ServiceMessageResponse>> Store(
+    internal static Results<
+        Ok<ServiceMessageResponse>,
+        NotFound<ServiceMessageResponse>,
+        JsonHttpResult<ServiceMessageResponse>> Store(
         StoreRequest request,
         IStorageEngine storageEngine)
     {
-        var success = storageEngine.Store(request.SourcePath, request.Number);
+        var status = storageEngine.Store(request.SourcePath, request.Number);
 
-        return success
-            ? TypedResults.Ok(new ServiceMessageResponse("200"))
-            : TypedResults.BadRequest(new ServiceMessageResponse("400"));
+        return status switch
+        {
+            StoreStatus.Success => TypedResults.Ok(new ServiceMessageResponse("200")),
+            StoreStatus.DestinationNotFound => TypedResults.NotFound(
+                new ServiceMessageResponse("destination_not_found")),
+            StoreStatus.SourceNotFound => TypedResults.NotFound(
+                new ServiceMessageResponse("source_not_found")),
+            StoreStatus.ShareUnavailable => TypedResults.Json(
+                new ServiceMessageResponse("share_unavailable"),
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            StoreStatus.CopyFailed => TypedResults.Json(
+                new ServiceMessageResponse("copy_failed"),
+                statusCode: StatusCodes.Status500InternalServerError),
+            _ => TypedResults.Json(
+                new ServiceMessageResponse("unknown_error"),
+                statusCode: StatusCodes.Status500InternalServerError),
+        };
     }
 }
