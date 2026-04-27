@@ -2,6 +2,7 @@
 
 from .API.StorageService import (
     STORAGE_MESSAGE_DESTINATION_NOT_FOUND,
+    STORAGE_MESSAGE_SOURCE_NOT_FOUND,
     StorageServiceError,
     send_storage_payload,
 )
@@ -103,6 +104,12 @@ def save_sent(db: DB_adapter, sent_messages: list) -> None:
 
             send_storage_payload(message.path, nmb)
             db.mark_operated("Sent", message.id)
+        except FileNotFoundError:
+            db.mark_operated("Sent", message.id)
+            print(
+                f"Sent message {message.id} marked operated: "
+                f"{STORAGE_MESSAGE_SOURCE_NOT_FOUND}: {message.path}"
+            )
         except StorageServiceError as exc:
             if (
                 exc.status_code == 404

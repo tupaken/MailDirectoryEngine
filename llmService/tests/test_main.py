@@ -282,6 +282,32 @@ def test_save_sent_marks_operated_when_storage_destination_is_missing(monkeypatc
     assert call("Sent message 13 marked operated: destination not found") in print_mock.mock_calls
 
 
+def test_save_sent_marks_operated_when_local_source_file_is_missing(monkeypatch):
+    """Missing local `.eml` files should be treated as final and marked operated."""
+
+    fake_db = Mock()
+    subject_mock = Mock(
+        side_effect=FileNotFoundError(2, "No such file or directory", "C:/mail-export/16.eml")
+    )
+    project_mock = Mock()
+    storage_mock = Mock()
+    print_mock = Mock()
+
+    monkeypatch.setattr(main_module, "subject_from_send", subject_mock)
+    monkeypatch.setattr(main_module, "prj_number_extraction", project_mock)
+    monkeypatch.setattr(main_module, "send_storage_payload", storage_mock)
+    monkeypatch.setattr(builtins, "print", print_mock)
+
+    main_module.save_sent(fake_db, [Message(id=16, path="C:/mail-export/16.eml")])
+
+    project_mock.assert_not_called()
+    storage_mock.assert_not_called()
+    fake_db.mark_operated.assert_called_once_with("Sent", 16)
+    assert call(
+        "Sent message 16 marked operated: source_not_found: C:/mail-export/16.eml"
+    ) in print_mock.mock_calls
+
+
 def test_save_sent_leaves_retryable_storage_error_unoperated(monkeypatch):
     """Retryable storage errors should keep sent rows unoperated for later retries."""
 

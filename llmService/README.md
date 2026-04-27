@@ -39,6 +39,7 @@ Python worker for inbox post-processing:
 - `prj_number_extraction(subject)` matches a leading project number in `NN-NNN` or `NN NNN` form and normalizes spaces to `-`.
 - `send_storage_payload(path, number)` posts the file path and project number to `StorageService`.
 - Missing `Subject` headers and subjects without a project number are treated as final non-actionable results and are marked operated without retry.
+- Missing local exported `.eml` files are also treated as final and marked operated, because the source path is no longer available to process.
 - `StorageService` responses with `404 destination_not_found` are also treated as final and marked operated, because no matching destination folder exists for that project number anymore.
 - `StorageService` responses such as `404 source_not_found`, `503 share_unavailable`, or `500 copy_failed` remain retryable and leave the row unoperated.
 
