@@ -79,7 +79,14 @@ def contact_sync(db: DB_adapter, messages: list) -> None:
                 print(f"Message {message.id} marked operated: irrelevant")
                 continue
 
-            print(f"Message {message.id} left unoperated: no clear decision ({disposition_label})")
+            result_signature = disposition_label
+            count = db.record_unknown_result(message.id, result_signature)
+
+            if count >= 3:
+                print(f"Message {message.id} marked operated: no clear decision 3 times ({disposition_label})")
+            else:
+                print(f"Message {message.id} left unoperated: no clear decision ({disposition_label}), retry {count}/3")
+
 
         except Exception as exc:
             print(f"Message {message.id} failed: {exc}")

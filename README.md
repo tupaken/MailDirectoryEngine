@@ -6,6 +6,8 @@ A quick command reference for build, run, tests, and database migration.
 
 - API reference (English): `MailParsing/docs/API.md`
 - Runtime configuration overview: see `MailParsing/src/Imap/Imap_config.example.json`
+- Contact API and EWS sync details: `ContactService/README.md`
+- Storage API and mounted-share behavior: `MailStorageService/README.md`
 - Python worker documentation: `llmService/README.md`
 
 ## Prerequisites
@@ -30,16 +32,28 @@ dotnet restore .\MailParsing\MailDirectoryEngine.slnx
 
 ## Build
 
-Debug:
+MailParsing:
 
 ```powershell
 dotnet build .\MailParsing\MailDirectoryEngine.slnx -c Debug
 ```
 
-Release:
+MailParsing (Release):
 
 ```powershell
 dotnet build .\MailParsing\MailDirectoryEngine.slnx -c Release
+```
+
+ContactService:
+
+```powershell
+dotnet build .\ContactService\ContactsService.csproj
+```
+
+MailStorageService:
+
+```powershell
+dotnet build .\MailStorageService\MailStorageService.csproj
 ```
 
 ## Run the app
@@ -84,6 +98,29 @@ Canonical ingest payload example:
   }
 }
 ```
+
+## Run MailStorageService API
+
+```powershell
+dotnet run --project .\MailStorageService\MailStorageService.csproj
+```
+
+Notes:
+- Health endpoint: `GET http://localhost:5001/health`
+- Store endpoint: `POST http://localhost:5001/store`
+- In Compose, the service receives `/mail-export` as a bind mount and mounts the SMB/CIFS share itself at `/mounted-share`.
+- Local `dotnet run` works for the HTTP API, but the share path and mount prerequisites still need to exist on that machine.
+
+## Run llmService Worker
+
+```powershell
+uv --project llmService run python -m llmService.main
+```
+
+Notes:
+- The worker expects PostgreSQL plus applied Flyway migrations.
+- Inbox rows are processed through the LLM and posted to ContactService when contacts are found.
+- Sent rows are forwarded to StorageService when a project number can be extracted from the exported `.eml` subject.
 
 ## Run Full Stack With Docker Compose
 
@@ -157,9 +194,11 @@ The repository uses PostgreSQL plus Flyway via `docker-compose.yml`.
 
 - PostgreSQL data is configured through `.env`.
 - SQL migration files live in `DB/migrations`.
-- `e_mails_inbox` stores inbox message hashes, message content, and an `account` scope value.
+- `e_mails_inbox` stores inbox message hashes, message content, an `account` scope value, and retry-tracking fields for repeated unknown LLM outcomes.
 - `e_mails_send` stores sent message hashes, exported `path`, and an `account` scope value.
+- `contacts` stores normalized contact metadata plus the created Exchange `ews_id`.
 - Current deduplication constraints are account-scoped: `UNIQUE(hash, account)` on both tables.
+- `DB/migrations/V6__inbox_same_count.sql` adds `same_result_count` and `last_result_signature` so llmService can stop retrying the same unknown inbox result forever.
 
 Start the database:
 
@@ -206,10 +245,14 @@ The console entry point in `MailParsing/src/main.cs` currently does the followin
 4. Loads all sent-message UIDs and recursively walks from newest to oldest until an already known `(hash, account)` combination is found.
 5. Exports each unseen sent message to `<savePath>/<uid>_<random6>.eml` and stores the hash, path, and account in `e_mails_send`.
 6. Logs exceptions to the console and immediately continues with the next loop iteration.
+7. `llmService` polls unoperated inbox and sent rows and processes sent rows before inbox rows on each worker loop.
+8. Inbox rows are marked operated when contact sync succeeds, when the LLM marks them irrelevant, or after the third matching unknown result signature.
+9. Sent rows are marked operated for successful storage, missing subject/project data, missing local export files, and storage `destination_not_found` responses.
+10. `ContactService` validates canonical payloads, creates Exchange contacts, and persists resulting contact metadata in PostgreSQL.
 
 ## Run tests
 
-All tests:
+MailParsing tests:
 
 ```powershell
 dotnet test .\MailParsing\MailDirectoryEngine.slnx
@@ -225,6 +268,18 @@ ContactService tests:
 
 ```powershell
 dotnet test .\ContactService\ContactService.Tests\ContactService.Tests.csproj
+```
+
+MailStorageService tests:
+
+```powershell
+dotnet test .\MailStorageService\MailStorageService.Tests\MailStorageService.Tests.csproj
+```
+
+llmService tests:
+
+```powershell
+uv --project llmService run pytest llmService/tests -q
 ```
 
 Single test (example):
@@ -255,16 +310,30 @@ dotnet clean .\MailParsing\MailDirectoryEngine.slnx
 
 ## Docker
 
-Build image:
+The repository no longer has a root `Dockerfile`. Use Docker Compose for the full stack or build service-local images directly.
+
+MailParsing:
 
 ```powershell
-docker build -t maildirectoryengine:local .
+docker build -t mailparsing:local .\MailParsing
 ```
 
-Run container:
+ContactService:
 
 ```powershell
-docker run --rm maildirectoryengine:local
+docker build -t contactservice:local .\ContactService
+```
+
+MailStorageService:
+
+```powershell
+docker build -t mailstorageservice:local .\MailStorageService
+```
+
+llmService:
+
+```powershell
+docker build -t llmservice:local .\llmService
 ```
 
 ## LLM Runtime (Ollama / llama.cpp)
@@ -289,4 +358,4 @@ $env:LLM_MODEL="llama3.2:1b"
 ## Known warnings
 
 - `NU1701` for `Microsoft.Exchange.WebServices 2.2.0` (package is .NET Framework-based).
-- `CS8981` for class name `main` in `src/main.cs`.
+- `CS8981` for class name `main` in `MailParsing/src/main.cs`.

@@ -112,3 +112,53 @@ class DB_adapter:
         with Session(self.db) as sessioin:
             sessioin.execute(stmt)
             sessioin.commit()
+
+    def record_unknown_result(self, message_id: int, result_signature: str) -> int:
+        """Persist one unclear inbox result and return the updated retry count.
+
+        The inbox row keeps track of the last unclear result signature plus how
+        often it appeared consecutively. A matching signature increments the
+        counter, a changed signature resets it to ``1``. The row is marked
+        operated automatically once the counter reaches three.
+
+        Args:
+            message_id: Primary key value of the inbox row to update.
+            result_signature: Stable signature representing the unclear result.
+
+        Returns:
+            The updated consecutive-match count for the stored signature.
+
+        Raises:
+            ValueError: If the inbox row does not exist.
+        """
+        with Session(self.db) as session:
+            column = self.inbox.c
+
+            stmt = (
+                select(column.same_result_count, column.last_result_signature)
+                .where(column.id == message_id)
+                .with_for_update()
+            )
+            row = session.execute(stmt).one_or_none()
+            if row is None:
+                raise ValueError(f"Inbox message not found: {message_id}")
+
+            new_count = (
+                row.same_result_count + 1
+                if row.last_result_signature == result_signature
+                else 1
+            )
+
+            update_stmt = (
+                update(self.inbox)
+                .where(column.id == message_id)
+                .values(
+                    same_result_count=new_count,
+                    last_result_signature=result_signature,
+                    operated=(new_count >= 3),
+                )
+            )
+
+            session.execute(update_stmt)
+            session.commit()
+            return new_count

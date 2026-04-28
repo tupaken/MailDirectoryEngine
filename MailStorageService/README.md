@@ -79,6 +79,16 @@ Normalization strips non-alphanumeric characters and compares case-insensitively
 | `UID` | Yes, unless `STORAGE_SKIP_MOUNT=true` | User ID used for the mounted share. |
 | `GID` | Yes, unless `STORAGE_SKIP_MOUNT=true` | Group ID used for the mounted share. |
 
+## Run
+
+From repository root:
+
+```powershell
+dotnet run --project .\MailStorageService\MailStorageService.csproj
+```
+
+In Docker Compose, the service listens on `http://localhost:5001` and receives the `/mail-export` bind mount that `llmService` references in storage requests.
+
 ## Testing
 
 Run the storage service tests with:

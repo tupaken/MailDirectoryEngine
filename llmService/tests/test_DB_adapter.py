@@ -77,9 +77,14 @@ class _FakeSelect:
     def __init__(self, columns):
         self.columns = columns
         self.where_condition = None
+        self.for_update = False
 
     def where(self, condition):
         self.where_condition = condition
+        return self
+
+    def with_for_update(self):
+        self.for_update = True
         return self
 
 
@@ -102,13 +107,17 @@ class _FakeUpdate:
 
 def _table_for_inbox():
     """Build a minimal inbox table mock with required columns."""
+    id_col = MagicMock()
+    id_col.__eq__.return_value = "inbox-id-condition"
     operated_col = MagicMock()
     operated_col.is_.return_value = "inbox-filter"
     return SimpleNamespace(
         c=SimpleNamespace(
-            id=object(),
+            id=id_col,
             content=object(),
             operated=operated_col,
+            same_result_count=object(),
+            last_result_signature=object(),
         )
     )
 
@@ -369,3 +378,89 @@ def test_mark_operated_raises_for_unknown_direction(monkeypatch):
 
     update_mock.assert_not_called()
     session_ctor.assert_not_called()
+
+
+def test_record_unknown_result_increments_matching_signature_and_marks_operated(monkeypatch):
+    """Matching signatures should increment the counter and set operated at 3."""
+    adapter = _bare_adapter()
+    adapter.inbox = _table_for_inbox()
+    _, session = _mock_session(monkeypatch)
+
+    select_calls = []
+    update_calls = []
+
+    def fake_select(*columns):
+        stmt = _FakeSelect(columns)
+        select_calls.append(stmt)
+        return stmt
+
+    def fake_update(table):
+        stmt = _FakeUpdate(table)
+        update_calls.append(stmt)
+        return stmt
+
+    monkeypatch.setattr(db_module, "select", fake_select)
+    monkeypatch.setattr(db_module, "update", fake_update)
+
+    row = SimpleNamespace(same_result_count=2, last_result_signature="unknown")
+    session.execute.side_effect = [
+        MagicMock(one_or_none=MagicMock(return_value=row)),
+        MagicMock(),
+    ]
+
+    count = adapter.record_unknown_result(7, "unknown")
+
+    assert count == 3
+    assert len(select_calls) == 1
+    assert select_calls[0].for_update is True
+    adapter.inbox.c.id.__eq__.assert_called_with(7)
+    assert len(update_calls) == 1
+    assert update_calls[0].table is adapter.inbox
+    assert update_calls[0].values_payload == {
+        "same_result_count": 3,
+        "last_result_signature": "unknown",
+        "operated": True,
+    }
+    session.commit.assert_called_once()
+
+
+def test_record_unknown_result_resets_count_for_changed_signature(monkeypatch):
+    """Changed signatures should reset the retry counter back to one."""
+    adapter = _bare_adapter()
+    adapter.inbox = _table_for_inbox()
+    _, session = _mock_session(monkeypatch)
+
+    select_calls = []
+    update_calls = []
+
+    def fake_select(*columns):
+        stmt = _FakeSelect(columns)
+        select_calls.append(stmt)
+        return stmt
+
+    def fake_update(table):
+        stmt = _FakeUpdate(table)
+        update_calls.append(stmt)
+        return stmt
+
+    monkeypatch.setattr(db_module, "select", fake_select)
+    monkeypatch.setattr(db_module, "update", fake_update)
+
+    row = SimpleNamespace(same_result_count=2, last_result_signature="irrelevant")
+    session.execute.side_effect = [
+        MagicMock(one_or_none=MagicMock(return_value=row)),
+        MagicMock(),
+    ]
+
+    count = adapter.record_unknown_result(9, "unknown")
+
+    assert count == 1
+    assert len(select_calls) == 1
+    assert select_calls[0].for_update is True
+    assert len(update_calls) == 1
+    assert update_calls[0].values_payload == {
+        "same_result_count": 1,
+        "last_result_signature": "unknown",
+        "operated": False,
+    }
+    session.commit.assert_called_once()

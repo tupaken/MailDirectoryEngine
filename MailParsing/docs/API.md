@@ -1,6 +1,7 @@
 # MailDirectoryEngine API Documentation
 
 This document describes the current behavior of all implemented methods in the project.
+Paths below are relative to the `MailParsing/` project unless noted otherwise.
 
 ## `src/main.cs`
 
@@ -74,6 +75,9 @@ This document describes the current behavior of all implemented methods in the p
 - `DB/migrations/V1__init.sql`: Creates `e_mails_send` with `id`, `hash`, `path`, `operated`, and `deleted`.
 - `DB/migrations/V2.sql`: Adds `account` column to both tables, backfills existing rows with `bewerbung`, and marks the new column as `NOT NULL`.
 - `DB/migrations/V3__fix_mail_indexes.sql`: Removes oversized uniqueness on `content` and aligns deduplication constraints to `UNIQUE(hash, account)` for inbox and sent tables.
+- `DB/migrations/V4__contacts.sql`: Creates the `contacts` table used by `ContactService` to persist normalized metadata for Exchange-created contacts.
+- `DB/migrations/V5__ews_item_id.sql`: Adds the unique `ews_id` column to `contacts` so PostgreSQL metadata can reference the created Exchange item.
+- `DB/migrations/V6__inbox_same_count.sql`: Adds `same_result_count` and `last_result_signature` to `e_mails_inbox` so `llmService` can stop retrying the same unknown result forever.
 
 ## `src/Imap/MailKitImapClientAdapter.cs`
 
