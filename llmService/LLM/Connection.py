@@ -8,6 +8,10 @@ from urllib import error, request
 
 from dotenv import load_dotenv
 from ollama import Client
+try:
+    from rapidfuzz import fuzz
+except ImportError:  # pragma: no cover - dependency fallback for minimal test envs
+    fuzz = None
 
 from .json_parser import parse_first_llm_json, parse_llm_json
 from .normalization import (
@@ -18,6 +22,7 @@ from .normalization import (
     _normalize_llm_result as _normalize_llm_result_impl,
 )
 from .promtInbox import PROMPT_CONTEXT_TEMPLATE, PROMPT_SIGNATURE_TEMPLATE
+from .patterns import GREETING_PATTERNS
 
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=ENV_PATH if ENV_PATH.exists() else None)
@@ -43,6 +48,34 @@ _SIGNATURE_CONTACT_HINT_RE = re.compile(
 _SIGNATURE_NAME_HINT_RE = re.compile(
     r"[A-Z\u00c4\u00d6\u00dc][A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df'`\-\.]+"
     r"\s+[A-Z\u00c4\u00d6\u00dc][A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df'`\-\.]+"
+)
+_MAIL_PREAMBLE_SCAN_LIMIT = 20
+_MAIL_HEADER_RE = re.compile(
+    r"^(von|from|an|to|cc|bcc|betreff|subject|gesendet|sent|datum|date)\s*:",
+    flags=re.IGNORECASE,
+)
+_MAIL_HEADER_TEXT_RE = re.compile(
+    r"^(gesendet\s+am|sent\s+on|am\s+.+\s+schrieb|on\s+.+\s+wrote)\b",
+    flags=re.IGNORECASE,
+)
+_FORWARDED_HEADER_RE = re.compile(
+    r"^-+\s*(urspruengliche nachricht|original message|weitergeleitete nachricht|forwarded message)\s*-+$",
+    flags=re.IGNORECASE,
+)
+_GREETING_INLINE_CONTENT_RE = re.compile(
+    r"\b(bitte|ich|wir|du|sie|kannst|koennen|koennten|anbei|wegen|bezueglich|"
+    r"please|we|i|you|can|could|attached|regarding)\b",
+    flags=re.IGNORECASE,
+)
+_FUZZY_GREETING_CANDIDATES = (
+    "hallo",
+    "guten tag",
+    "guten morgen",
+    "guten abend",
+    "sehr geehrte damen und herren",
+    "hello",
+    "dear sir or madam",
+    "to whom it may concern",
 )
 
 
@@ -102,6 +135,149 @@ def _infer_signature_start(lines: list[str]) -> int | None:
     return None
 
 
+def _normalize_preamble_line(line: str) -> str:
+    """Normalize one line for mail preamble detection."""
+
+    normalized = _ascii_fold(line)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized.strip(" \t,.;:!?")
+
+
+def _fuzzy_ratio(value: str, candidate: str) -> float:
+    """Compare greeting text while keeping rapidfuzz optional for local tests."""
+
+    if fuzz is not None:
+        return fuzz.ratio(value, candidate)
+
+    from difflib import SequenceMatcher
+
+    return SequenceMatcher(None, value, candidate).ratio() * 100
+
+
+def _looks_like_mail_header_line(line: str) -> bool:
+    """Return True for leading mail metadata lines that should not reach the LLM."""
+
+    normalized = _normalize_preamble_line(line)
+    if not normalized:
+        return False
+
+    return bool(
+        _MAIL_HEADER_RE.match(normalized)
+        or _MAIL_HEADER_TEXT_RE.match(normalized)
+        or _FORWARDED_HEADER_RE.match(normalized)
+    )
+
+
+def _looks_like_greeting_line(line: str) -> bool:
+    """Return True for a standalone greeting line, including small typos."""
+
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    normalized = _normalize_preamble_line(stripped)
+    if not normalized:
+        return False
+
+    # If text follows a comma on the same line, keep the line to avoid dropping content.
+    comma_index = normalized.find(",")
+    if comma_index != -1 and comma_index < len(normalized.rstrip(",")) - 1:
+        return False
+
+    words = normalized.split()
+    if len(words) > 9 or len(normalized) > 120:
+        return False
+
+    if _GREETING_INLINE_CONTENT_RE.search(normalized):
+        return False
+
+    if any(re.match(pattern, normalized) for pattern in GREETING_PATTERNS):
+        return True
+
+    return any(
+        _fuzzy_ratio(normalized, candidate) >= 85
+        for candidate in _FUZZY_GREETING_CANDIDATES
+    )
+
+
+def _strip_mail_preamble(mail: str) -> str:
+    """Strip leading mail headers and greeting lines from a context section."""
+
+    raw_mail = "" if mail is None else str(mail)
+    lines = raw_mail.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+    while lines and not lines[0].strip():
+        lines.pop(0)
+
+    scanned = 0
+    while lines and scanned < _MAIL_PREAMBLE_SCAN_LIMIT:
+        line = lines[0].strip()
+
+        if not line:
+            lines.pop(0)
+            scanned += 1
+            continue
+
+        if _looks_like_mail_header_line(line) or _looks_like_greeting_line(line):
+            lines.pop(0)
+            scanned += 1
+            continue
+
+        break
+
+    return "\n".join(lines).strip()
+
+
+def _looks_like_signature_name_line(line: str) -> bool:
+    """Return True for person-name lines directly after a sign-off marker."""
+
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    if _SIGNATURE_CONTACT_HINT_RE.search(stripped):
+        return False
+
+    normalized = _ascii_fold(stripped)
+    normalized = re.sub(
+        r"^(i\.?\s*a\.?|i\.?\s*v\.?|im\s+auftrag|ppa\.?|pp\.?|herr|frau|hr|fr|"
+        r"dr\.?|prof\.?|dipl\.?(?:-|\s*)ing\.?)\s+",
+        "",
+        normalized,
+    ).strip(" ,;:-")
+
+    if not normalized:
+        return False
+
+    return bool(_SIGNATURE_NAME_HINT_RE.search(stripped) or _SIGNATURE_NAME_HINT_RE.search(normalized))
+
+
+def _strip_signature_preamble(signature: str) -> str:
+    """Strip sign-off text and direct person-name lines from a signature block."""
+
+    raw_signature = "" if signature is None else str(signature)
+    lines = raw_signature.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+    while lines and not lines[0].strip():
+        lines.pop(0)
+
+    if not lines or not _is_signature_marker_line(lines[0]):
+        return "\n".join(lines).strip()
+
+    lines.pop(0)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+
+    removed_name_lines = 0
+    while lines and removed_name_lines < 3 and _looks_like_signature_name_line(lines[0]):
+        lines.pop(0)
+        removed_name_lines += 1
+        while lines and not lines[0].strip():
+            lines.pop(0)
+
+    return "\n".join(lines).strip()
+
+
 def _split_mail_context_and_signature(mail: str) -> tuple[str, str]:
     """Split one mail into context and signature sections for separate model calls."""
 
@@ -122,15 +298,15 @@ def _split_mail_context_and_signature(mail: str) -> tuple[str, str]:
         signature_start = _infer_signature_start(lines)
 
     if signature_start is None:
-        return normalized_mail.strip(), ""
+        return _strip_mail_preamble(normalized_mail), ""
 
     context = "\n".join(lines[:signature_start]).strip()
     signature = "\n".join(lines[signature_start:]).strip()
+    context = _strip_mail_preamble(context)
+    signature = _strip_signature_preamble(signature)
 
     if not signature:
-        return normalized_mail.strip(), ""
-    if not context:
-        return normalized_mail.strip(), signature
+        return _strip_mail_preamble(normalized_mail), ""
     return context, signature
 
 

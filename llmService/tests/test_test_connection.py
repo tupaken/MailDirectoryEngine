@@ -6,6 +6,8 @@ from unittest.mock import Mock, patch
 
 from llmService.LLM.Connection import (
     _split_mail_context_and_signature,
+    _strip_mail_preamble,
+    _strip_signature_preamble,
     llm_connection_with_disposition,
     test_connection as run_llm_connection,
 )
@@ -46,7 +48,8 @@ Telefon: +49 123456"""
         prompt_calls = fake_client.generate.call_args_list
         self.assertEqual("llama3.2:1b", prompt_calls[0].kwargs["model"])
         self.assertIn("Alex Beispiel ACME +49 123456", prompt_calls[0].kwargs["prompt"])
-        self.assertIn("Mit freundlichen Gruessen", prompt_calls[1].kwargs["prompt"])
+        self.assertIn("Telefon: +49 123456", prompt_calls[1].kwargs["prompt"])
+        self.assertNotIn("Mit freundlichen Gruessen", prompt_calls[1].kwargs["prompt"])
         self.assertIn("email context text", prompt_calls[0].kwargs["prompt"].lower())
         self.assertIn("email signature block", prompt_calls[1].kwargs["prompt"].lower())
         self.assertEqual(2, parse_mock.call_count)
@@ -250,8 +253,8 @@ signature"""
 
     def test_split_mail_context_and_signature_keeps_signature_separate(self):
         mail = """
-Hallo Team,
-bitte ruft mich zurueck.
+        Hallo Team,
+        bitte ruft mich zurueck.
 
 Mit freundlichen Gruessen
 Herr Dr. Taylor Beispiel
@@ -260,8 +263,53 @@ Telefon: +49 30 123456
 """
         context, signature = _split_mail_context_and_signature(mail)
         self.assertIn("bitte ruft mich zurueck", context)
-        self.assertIn("Mit freundlichen Gruessen", signature)
+        self.assertNotIn("Mit freundlichen Gruessen", signature)
+        self.assertNotIn("Taylor Beispiel", signature)
+        self.assertTrue(signature.startswith("Muster GmbH"))
         self.assertIn("Telefon: +49 30 123456", signature)
+
+    def test_strip_signature_preamble_removes_signoff_and_name(self):
+        signature = """
+Mit freundlichen Gruessen
+Herr Dr. Taylor Beispiel
+Muster GmbH
+Telefon: +49 30 123456
+"""
+        result = _strip_signature_preamble(signature)
+
+        self.assertEqual("Muster GmbH\nTelefon: +49 30 123456", result)
+
+    def test_strip_mail_preamble_removes_headers_and_greeting(self):
+        mail = """
+Von: Max Mustermann
+Gesendet: Dienstag, 28. April 2026 09:15
+An: Info
+Betreff: Rueckruf
+
+Sehr geehrte Damen und Herren,
+
+bitte rufen Sie mich zurueck.
+"""
+        result = _strip_mail_preamble(mail)
+
+        self.assertEqual("bitte rufen Sie mich zurueck.", result)
+
+    def test_strip_mail_preamble_removes_greeting_with_typo(self):
+        mail = """
+Sehr gehrte Damen und Herren,
+
+anbei erhalten Sie unsere Kontaktdaten.
+"""
+        result = _strip_mail_preamble(mail)
+
+        self.assertEqual("anbei erhalten Sie unsere Kontaktdaten.", result)
+
+    def test_strip_mail_preamble_keeps_inline_content(self):
+        mail = "Hallo Herr Mueller, bitte rufen Sie mich zurueck."
+
+        result = _strip_mail_preamble(mail)
+
+        self.assertEqual(mail, result)
 
 
 if __name__ == "__main__":
