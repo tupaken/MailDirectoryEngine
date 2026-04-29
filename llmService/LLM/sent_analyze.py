@@ -2,13 +2,13 @@
 
 import re
 
+PROJECT_NUMBER_PREFIX_RE = re.compile(r"^\s*(\d{2}[-\s]\d{3})")
+
 
 def prj_number_extraction(subject: str) -> str | None:
     """Extract a leading `NN-NNN` style project number from a subject."""
 
-    pattern_prj_number = re.compile(r"^\s*(\d{2}(-|\s)\d{3})")
-
-    m = pattern_prj_number.search(subject)
+    m = PROJECT_NUMBER_PREFIX_RE.search(subject)
 
     if not m:
         return None
