@@ -1,17 +1,21 @@
-"""Canonical contact payload + HTTP client for ContactService integration.
+"""Canonical ContactService payload mapping.
 
 Phone numbers are emitted in two parallel forms:
 - ``raw`` keeps a human-readable display format.
 - ``e164`` keeps a machine-friendly international representation when available.
+
+The actual HTTP call lives in ``llmService.API.ContactService``; this module
+keeps payload construction and a compatibility wrapper for existing imports.
 """
 
-import json
 import os
 import re
 from urllib import error, request
 
+from .API import ContactService as _contact_service_api
+
 SCHEMA_VERSION = "1.0"
-DEFAULT_CONTACT_SERVICE_ENDPOINT = "http://localhost:5000/api/contacts/canonical"
+DEFAULT_CONTACT_SERVICE_ENDPOINT = _contact_service_api.DEFAULT_CONTACT_SERVICE_ENDPOINT
 PHONE_RE = re.compile(
     r"(?:(?:\+|00)\d[\d\s()/-]{5,}\d|\b0\d[\d\s()/-]{5,}\d\b|\b\d{6,17}\b)"
 )
@@ -269,6 +273,8 @@ def _collect_phone_candidates(contact: dict, source_text: str) -> list[tuple[str
     candidates: list[tuple[str, str]] = []
 
     def add_candidate(phone_type: str, value: object) -> None:
+        """Append one validated phone candidate with a normalized type label."""
+
         raw = _clean_text(value)
         if not raw:
             return
@@ -359,7 +365,12 @@ def build_canonical_contact_payload(
         raise ValueError("contact must be a dictionary")
 
     full_name = _clean_text(contact.get("full_name"))
-    given_name, surname = _split_name(full_name)
+    display_name_fallback = _clean_text(contact.get("_display_name_fallback"))
+    payload_full_name = full_name or display_name_fallback
+    if full_name:
+        given_name, surname = _split_name(full_name)
+    else:
+        given_name, surname = "", ""
 
     phones = _build_phone_items(contact, source_text or "")
     if not phones:
@@ -372,7 +383,7 @@ def build_canonical_contact_payload(
         "schema_version": SCHEMA_VERSION,
         "account_key": account_key,
         "contact": {
-            "full_name": full_name,
+            "full_name": payload_full_name,
             "given_name": given_name,
             "surname": surname,
             "company": _clean_text(contact.get("company")),
@@ -391,45 +402,8 @@ def build_canonical_contact_payload(
 
 
 def send_canonical_contact_payload(payload: dict) -> dict:
-    """Send one canonical contact payload to ContactService API."""
+    """Compatibility wrapper for the ContactService API client."""
 
-    endpoint = os.getenv("CONTACT_SERVICE_ENDPOINT", DEFAULT_CONTACT_SERVICE_ENDPOINT).strip()
-    if not endpoint:
-        raise RuntimeError("CONTACT_SERVICE_ENDPOINT is empty")
-
-    timeout = int(os.getenv("CONTACT_SERVICE_TIMEOUT_SECONDS", "30"))
-    api_key = _clean_text(os.getenv("CONTACT_SERVICE_API_KEY"))
-
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["X-Api-Key"] = api_key
-
-    req = request.Request(
-        url=endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(req, timeout=timeout) as response:
-            response_body = response.read().decode("utf-8")
-    except error.HTTPError as exc:
-        error_text = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(
-            f"ContactService returned HTTP {exc.code} for {endpoint}: {error_text}"
-        ) from exc
-    except error.URLError as exc:
-        raise RuntimeError(f"Could not reach ContactService endpoint {endpoint}: {exc}") from exc
-
-    if not response_body.strip():
-        return {"status": "ok"}
-
-    try:
-        parsed = json.loads(response_body)
-    except json.JSONDecodeError:
-        return {"status": "ok", "raw_response": response_body}
-
-    if isinstance(parsed, dict):
-        return parsed
-    return {"status": "ok", "response": parsed}
+    _contact_service_api.error = error
+    _contact_service_api.request = request
+    return _contact_service_api.send_canonical_contact_payload(payload)

@@ -1,51 +1,12 @@
-"""Backward-compatible public facade for LLM inbox classification.
+"""Inbox contact-classification orchestration."""
 
-Implementation lives in focused modules:
-- ``API.LlmBackendClient`` contains LLM API calls.
-- ``prompt_builder`` contains prompt rendering.
-- ``mail_preprocessing`` contains header/thread/signature heuristics.
-- ``classifier`` coordinates parsing, normalization, and disposition handling.
-"""
-
-from ..API import LlmBackendClient as _llm_backend_client
-from .classifier import (
-    DISPOSITION_IRRELEVANT,
-    DISPOSITION_RELEVANT,
-    DISPOSITION_UNKNOWN,
-    _attach_source_text,
-    _build_segments,
-    _non_empty_segments,
-    _resolve_disposition,
-)
+from ..API.LlmBackendClient import generate_prompt_response
 from .json_parser import parse_first_llm_json, parse_llm_json
 from .mail_preprocessing import (
-    _ascii_fold,
     _compose_clean_mail_source,
-    _find_signature_start,
-    _fuzzy_ratio,
-    _has_previous_content,
-    _infer_signature_start,
-    _is_leading_header_artifact_line,
-    _is_plain_marker_line,
-    _is_quote_history_line,
-    _is_quoted_history_intro_line,
-    _is_signature_marker_line,
-    _looks_like_greeting_line,
-    _looks_like_mail_header_cluster,
-    _looks_like_mail_header_line,
-    _looks_like_signature_name_line,
-    _mail_header_key,
-    _normalize_preamble_line,
-    _prepare_signature_extraction_source,
-    _split_mail_context_and_signature,
     _split_mail_context_and_signature_segments,
     _split_mail_thread,
     _strip_mail_headers_everywhere,
-    _strip_mail_preamble,
-    _strip_one_header_field,
-    _strip_quote_prefix,
-    _strip_signature_header_tail,
-    _strip_signature_preamble,
 )
 from .normalization import (
     _dedupe_contacts,
@@ -56,9 +17,9 @@ from .normalization import (
 )
 from .prompt_builder import _build_prompt
 
-Client = _llm_backend_client.Client
-error = _llm_backend_client.error
-request = _llm_backend_client.request
+DISPOSITION_RELEVANT = "relevant"
+DISPOSITION_IRRELEVANT = "irrelevant"
+DISPOSITION_UNKNOWN = "unknown"
 
 
 def _normalize_llm_result(parsed: dict, mail: str) -> dict:
@@ -85,34 +46,62 @@ def _normalize_llm_contacts(parsed: dict, mail: str) -> list[dict]:
     return _dedupe_contacts(results)
 
 
-def _ollama_generate(prompt: str) -> str:
-    """Call Ollama generate endpoint and return raw model text."""
+def _attach_source_text(contacts: list[dict], source_text: str) -> list[dict]:
+    """Attach the originating mail part to contacts for later scoped sync."""
 
-    _sync_backend_client_aliases()
-    return _llm_backend_client._ollama_generate(prompt)
-
-
-def _llamacpp_generate(prompt: str) -> str:
-    """Call llama.cpp OpenAI-compatible endpoint and return raw model text."""
-
-    _sync_backend_client_aliases()
-    return _llm_backend_client._llamacpp_generate(prompt)
-
-
-def _generate_raw_response(mail: str, query_type: str) -> str:
-    """Generate one raw model response for the provided mail section."""
-
-    prompt = _build_prompt(mail, query_type=query_type)
-    _sync_backend_client_aliases()
-    return _llm_backend_client.generate_prompt_response(prompt)
+    enriched: list[dict] = []
+    for contact in contacts:
+        candidate = dict(contact)
+        existing_source = candidate.get("_source_text")
+        if not isinstance(existing_source, str) or not existing_source.strip():
+            candidate["_source_text"] = source_text
+        enriched.append(candidate)
+    return enriched
 
 
-def _sync_backend_client_aliases() -> None:
-    """Keep legacy monkeypatch points wired to the API client implementation."""
+def _build_segments(mail_parts: list[str]) -> tuple[list[tuple[str, str, str]], list[str], list[str]]:
+    """Build model-call segments plus deterministic extraction sources."""
 
-    _llm_backend_client.Client = Client
-    _llm_backend_client.error = error
-    _llm_backend_client.request = request
+    segments: list[tuple[str, str, str]] = []
+    clean_mail_sources: list[str] = []
+    signature_extraction_sources: list[str] = []
+
+    for mail_part in mail_parts:
+        stripped_mail_part = _strip_mail_headers_everywhere(mail_part)
+        context_mail, signature_mail, signature_source_mail = (
+            _split_mail_context_and_signature_segments(stripped_mail_part)
+        )
+        context_mail = _strip_mail_headers_everywhere(context_mail)
+        signature_mail = _strip_mail_headers_everywhere(signature_mail)
+        signature_source_mail = _strip_mail_headers_everywhere(signature_source_mail)
+        clean_mail_source = _strip_mail_headers_everywhere(
+            _compose_clean_mail_source(context_mail, signature_mail)
+        )
+
+        if clean_mail_source:
+            clean_mail_sources.append(clean_mail_source)
+        if signature_source_mail:
+            signature_extraction_sources.append(signature_source_mail)
+
+        segments.extend(
+            [
+                ("context", context_mail, context_mail),
+                ("signature", signature_mail, signature_mail),
+            ]
+        )
+
+    return segments, clean_mail_sources, signature_extraction_sources
+
+
+def _non_empty_segments(segments: list[tuple[str, str, str]], mail: str) -> list[tuple[str, str, str]]:
+    """Filter empty model-call segments with a fallback to the raw mail."""
+
+    result = [
+        (query_type, segment_mail, source_mail)
+        for query_type, segment_mail, source_mail in segments
+        if isinstance(segment_mail, str) and segment_mail.strip()
+    ]
+    return result or [("context", str(mail), str(mail))]
 
 
 def _classify_model_segments(
@@ -144,6 +133,13 @@ def _classify_model_segments(
     return normalized_contacts, explicit_false_count, explicit_true_count
 
 
+def _generate_raw_response(mail: str, query_type: str) -> str:
+    """Generate one raw model response for the provided mail section."""
+
+    prompt = _build_prompt(mail, query_type=query_type)
+    return generate_prompt_response(prompt)
+
+
 def _extract_deterministic_contacts(
     clean_mail_sources: list[str],
     signature_extraction_sources: list[str],
@@ -166,6 +162,23 @@ def _extract_deterministic_contacts(
         )
 
     return list_contacts + signature_contacts
+
+
+def _resolve_disposition(
+    contacts: list[dict],
+    explicit_false_count: int,
+    explicit_true_count: int,
+    segment_count: int,
+) -> str:
+    """Map segment results into the worker disposition contract."""
+
+    if contacts:
+        return DISPOSITION_RELEVANT
+    if explicit_false_count == segment_count:
+        return DISPOSITION_IRRELEVANT
+    if explicit_true_count == segment_count:
+        return DISPOSITION_IRRELEVANT
+    return DISPOSITION_UNKNOWN
 
 
 def llm_connection_with_disposition(mail: str) -> dict:
@@ -226,14 +239,3 @@ def test_connection(mail: str) -> dict | list[dict] | None:
     """Backward-compatible wrapper kept for existing callers/tests."""
 
     return llm_connection(mail)
-
-__all__ = [
-    "DISPOSITION_IRRELEVANT",
-    "DISPOSITION_RELEVANT",
-    "DISPOSITION_UNKNOWN",
-    "llm_connection",
-    "llm_connection_with_disposition",
-    "parse_first_llm_json",
-    "parse_llm_json",
-    "test_connection",
-]

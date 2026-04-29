@@ -16,7 +16,7 @@ public class StorageEngineTests
             mountCheck,
             mountPath: "ignored",
             directory2: "Dokumente",
-            directory3: "Bewerbungen",
+            directory3: "TestDocs",
             copyWithRsync: static (_, _) => 0,
             delay: _ => delayCalls++);
 
@@ -45,7 +45,7 @@ public class StorageEngineTests
                 mountCheck,
                 mountPath: root,
                 directory2: "Dokumente",
-                directory3: "Bewerbungen",
+                directory3: "TestDocs",
                 copyWithRsync: (_, destinationPath) =>
                 {
                     destinations.Add(destinationPath);
@@ -80,7 +80,7 @@ public class StorageEngineTests
                 new FakeMountCheck(true),
                 mountPath: root,
                 directory2: "Dokumente",
-                directory3: "Bewerbungen",
+                directory3: "TestDocs",
                 copyWithRsync: static (_, _) => 0,
                 delay: _ => { });
 
@@ -109,7 +109,7 @@ public class StorageEngineTests
                 new FakeMountCheck(true),
                 mountPath: root,
                 directory2: "Dokumente",
-                directory3: "Bewerbungen",
+                directory3: "TestDocs",
                 copyWithRsync: static (_, _) => 0,
                 delay: _ => { });
 
@@ -141,7 +141,7 @@ public class StorageEngineTests
                 new FakeMountCheck(true),
                 mountPath: root,
                 directory2: "Dokumente",
-                directory3: "Bewerbungen",
+                directory3: "TestDocs",
                 copyWithRsync: (currentSourcePath, currentDestinationPath) =>
                 {
                     sourcePath = currentSourcePath;
@@ -180,7 +180,7 @@ public class StorageEngineTests
                 new FakeMountCheck(true),
                 mountPath: root,
                 directory2: "Dokumente",
-                directory3: "Bewerbungen",
+                directory3: "TestDocs",
                 copyWithRsync: (_, _) => exitCodes.Dequeue(),
                 delay: _ => delayCalls++);
 
@@ -213,7 +213,7 @@ public class StorageEngineTests
                 new FakeMountCheck(true),
                 mountPath: root,
                 directory2: "Dokumente",
-                directory3: "Bewerbungen",
+                directory3: "TestDocs",
                 copyWithRsync: (_, _) =>
                 {
                     attempts++;
@@ -265,7 +265,7 @@ public class StorageEngineTests
         var otherDirectory = Directory.CreateDirectory(Path.Combine(level2.FullName, "Zwischenablage"));
         _ = otherDirectory;
 
-        return Directory.CreateDirectory(Path.Combine(level2.FullName, "Bewerbungen & Lebenslaeufe")).FullName;
+        return Directory.CreateDirectory(Path.Combine(level2.FullName, "TestDocs & Attachments")).FullName;
     }
 
     private static string CreateTempDirectory()

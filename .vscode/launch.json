@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug llmService",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "llmService.main",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "POSTGRES_HOST": "localhost",
+        "POSTGRES_PORT": "5432",
+        "LLM_ENDPOINT": "http://localhost:11434",
+        "CONTACT_SERVICE_ENDPOINT": "http://localhost:5000/api/contacts/canonical",
+        "STORAGE_SERVICE_ENDPOINT": "http://localhost:5001/store"
+      }
+    }
+  ]
+}

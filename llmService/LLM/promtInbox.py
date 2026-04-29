@@ -1,3 +1,5 @@
+"""Prompt templates for context and signature LLM classification calls."""
+
 _OUTPUT_SCHEMA = """
 Output ONLY one valid JSON object in exactly one of these two forms:
 

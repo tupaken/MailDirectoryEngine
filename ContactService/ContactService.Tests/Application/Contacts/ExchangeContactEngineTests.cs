@@ -16,7 +16,7 @@ public class ExchangeContactEngineTests
         var configProvider = new FakeEwsConfigProvider();
 
         var ex = Assert.Throws<ArgumentNullException>(
-            () => new ExchangeContactEngine(null!, configProvider, "bewerbung"));
+            () => new ExchangeContactEngine(null!, configProvider, "testaccount"));
 
         Assert.Equal("factory", ex.ParamName);
     }
@@ -30,7 +30,7 @@ public class ExchangeContactEngineTests
         var factory = new FakeEwsContactClientFactory();
 
         var ex = Assert.Throws<ArgumentNullException>(
-            () => new ExchangeContactEngine(factory, null!, "bewerbung"));
+            () => new ExchangeContactEngine(factory, null!, "testaccount"));
 
         Assert.Equal("configProvider", ex.ParamName);
     }
@@ -59,7 +59,7 @@ public class ExchangeContactEngineTests
         var engine = new ExchangeContactEngine(
             new FakeEwsContactClientFactory(),
             new FakeEwsConfigProvider(),
-            "bewerbung");
+            "testaccount");
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => engine.GetAllContactsAsync(0, CancellationToken.None));
@@ -80,7 +80,7 @@ public class ExchangeContactEngineTests
             Items: new List<ContactDto> { BuildContact("Contact 2"), BuildContact("Contact 3") },
             NextOffset: null));
 
-        var engine = new ExchangeContactEngine(factory, configProvider, "bewerbung");
+        var engine = new ExchangeContactEngine(factory, configProvider, "testaccount");
 
         var contacts = await engine.GetAllContactsAsync(50, CancellationToken.None);
 
@@ -97,7 +97,7 @@ public class ExchangeContactEngineTests
                 Assert.Equal(2, request.Offset);
                 Assert.Equal(50, request.PageSize);
             });
-        Assert.Equal("bewerbung", configProvider.ReceivedAccountKey);
+        Assert.Equal("testaccount", configProvider.ReceivedAccountKey);
         Assert.Same(configProvider.ConfigToReturn, factory.ReceivedConfig);
         Assert.True(factory.Client.Disposed);
     }
@@ -110,13 +110,13 @@ public class ExchangeContactEngineTests
     {
         var factory = new FakeEwsContactClientFactory();
         var configProvider = new FakeEwsConfigProvider();
-        var engine = new ExchangeContactEngine(factory, configProvider, "bewerbung");
+        var engine = new ExchangeContactEngine(factory, configProvider, "testaccount");
         var dto = BuildContact("New Contact");
 
         await engine.AddContactAsync(dto, CancellationToken.None);
 
         Assert.Same(dto, factory.Client.AddedContact);
-        Assert.Equal("bewerbung", configProvider.ReceivedAccountKey);
+        Assert.Equal("testaccount", configProvider.ReceivedAccountKey);
         Assert.Same(configProvider.ConfigToReturn, factory.ReceivedConfig);
         Assert.True(factory.Client.Disposed);
     }
@@ -130,7 +130,7 @@ public class ExchangeContactEngineTests
         var engine = new ExchangeContactEngine(
             new FakeEwsContactClientFactory(),
             new FakeEwsConfigProvider(),
-            "bewerbung");
+            "testaccount");
 
         var ex = await Assert.ThrowsAsync<ArgumentNullException>(
             () => engine.AddContactAsync(null!, CancellationToken.None));

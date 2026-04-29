@@ -18,7 +18,7 @@ public class ImapEngineTests
     [Fact]
     public void Constructor_CreatesInstance()
     {
-        var engine = new ImapEngine("bewerbung", "ACCOUNT_HASH");
+        var engine = new ImapEngine("testaccount", "ACCOUNT_HASH");
         Assert.NotNull(engine);
     }
 
@@ -32,7 +32,7 @@ public class ImapEngineTests
             new ImapEngine(
                 clientFactory: null!,
                 configProvider: new FakeConfigProvider(),
-                accountKey: "bewerbung",
+                accountKey: "testaccount",
                 Hash: "ACCOUNT_HASH"));
 
         Assert.Equal("clientFactory", ex.ParamName);
@@ -48,7 +48,7 @@ public class ImapEngineTests
             new ImapEngine(
                 clientFactory: new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), new FakeImapFolder("Inbox", "Inbox", 0))),
                 configProvider: null!,
-                accountKey: "bewerbung",
+                accountKey: "testaccount",
                 Hash: "ACCOUNT_HASH"));
 
         Assert.Equal("configProvider", ex.ParamName);
@@ -96,7 +96,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var ex = Assert.Throws<InvalidOperationException>(() => engine.GetLastSentMail());
@@ -133,7 +133,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetLastInboxMessage();
@@ -162,7 +162,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetLastInboxMessage();
@@ -207,7 +207,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetLastSentMail();
@@ -242,7 +242,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetLastSentMail();
@@ -271,7 +271,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), folder)),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetAllUIDS(folder);
@@ -299,7 +299,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetAllUIDInbox();
@@ -335,7 +335,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetAllUIDSent();
@@ -385,7 +385,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             factory,
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         engine.WithClient(connectedClient =>
@@ -422,7 +422,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetInbox(client);
@@ -453,7 +453,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetSent(client);
@@ -472,7 +472,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), new FakeImapFolder("Inbox", "Inbox", 0))),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             expectedHash);
 
         var result = engine.getAccountHash();
@@ -495,7 +495,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), folder)),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetLastUID(folder);
@@ -522,7 +522,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(new FakeImapClient('/', new FakeImapFolder("Root", "Root", 0), folder)),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetLastUID(folder);
@@ -551,7 +551,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetLastInboxMessage();
@@ -581,7 +581,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetInboxMessage(uid);
@@ -619,7 +619,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var result = engine.GetSentMessage(uid);
@@ -653,7 +653,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(savePath),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         try
@@ -693,7 +693,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(savePath: ""),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var ex = Assert.Throws<InvalidOperationException>(() => engine.SaveInboxMail(uid));
@@ -724,7 +724,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(savePath),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         try
@@ -769,7 +769,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(savePath),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         try
@@ -815,7 +815,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(savePath: ""),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         var ex = Assert.Throws<InvalidOperationException>(() => engine.SaveSentMail(uid));
@@ -852,7 +852,7 @@ public class ImapEngineTests
         var engine = new ImapEngine(
             new FakeImapClientFactory(client),
             new FakeConfigProvider(savePath),
-            "bewerbung",
+            "testaccount",
             "ACCOUNT_HASH");
 
         try
