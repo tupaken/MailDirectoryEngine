@@ -26,21 +26,30 @@ def _normalize_contacts(value: object) -> list[dict]:
 def _sync_contacts(message_id: int, contacts: list[dict], source_text: str) -> None:
     """Send all extracted contacts for one message to ContactService."""
 
+    failures: list[str] = []
+
     for contact in contacts:
         contact_source_text = contact.get("_source_text")
         if not isinstance(contact_source_text, str) or not contact_source_text.strip():
             contact_source_text = source_text
 
-        payload = build_canonical_contact_payload(
-            contact,
-            source_message_id=message_id,
-            source_text=contact_source_text,
-        )
-        response = send_canonical_contact_payload(payload)
-        if isinstance(response, dict):
-            print(response)
-        else:
-            print(contact.get("full_name"))
+        try:
+            payload = build_canonical_contact_payload(
+                contact,
+                source_message_id=message_id,
+                source_text=contact_source_text,
+            )
+            response = send_canonical_contact_payload(payload)
+            if isinstance(response, dict):
+                print(response)
+            else:
+                print(contact.get("full_name"))
+        except Exception as exc:
+            full_name = str(contact.get("full_name") or "").strip() or "<unknown>"
+            failures.append(f"{full_name}: {exc}")
+
+    if failures:
+        raise RuntimeError("; ".join(failures))
 
 
 def main() -> None:

@@ -20,11 +20,11 @@ def test_build_canonical_contact_payload_maps_llm_shape(monkeypatch):
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
-            "full_name": "Robin Beispiel",
+            "full_name": "Robin Smith",
             "company": "Acme",
-            "email": "robin.beispiel@anon.invalid",
+            "email": "robin.smith@anon.invalid",
             "phone": "+49 (151) 111222",
-            "address": "Musterstrasse 1",
+            "address": "River Street 1",
             "website": "anon.invalid",
         },
         source_message_id=42,
@@ -34,7 +34,7 @@ def test_build_canonical_contact_payload_maps_llm_shape(monkeypatch):
     assert payload["account_key"] == "testaccount"
     assert payload["source_message_id"] == "42"
     assert payload["contact"]["given_name"] == "Robin"
-    assert payload["contact"]["surname"] == "Beispiel"
+    assert payload["contact"]["surname"] == "Smith"
     assert payload["contact"]["phones"] == [
         {"type": "business", "raw": "+49 151 111222", "e164": "+49151111222"}
     ]
@@ -50,12 +50,12 @@ def test_build_canonical_contact_payload_extracts_fax_mobile_and_other_from_sour
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
-            "full_name": "Robin Beispiel",
+            "full_name": "Robin Smith",
             "phone": "+49 30 123456",
         },
         source_message_id=7,
         source_text="""
-Telefon: +49 30 123456
+Phone: +49 30 123456
 Telefax: +49 30 123457
 Mobil: +49 171 555000
 Zentrale: +49 30 123458
@@ -77,7 +77,7 @@ def test_build_canonical_contact_payload_formats_0049_and_e164_phone_sources(mon
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
-            "full_name": "Robin Beispiel",
+            "full_name": "Robin Smith",
             "phone": "0049 151 111222",
             "phone_numbers": [
                 {"type": "mobile", "e164": "+491701234567"},
@@ -91,6 +91,41 @@ def test_build_canonical_contact_payload_formats_0049_and_e164_phone_sources(mon
     assert {"type": "mobile", "raw": "+49 170 1234567", "e164": "+491701234567"} in phones
 
 
+def test_build_canonical_contact_payload_keeps_multiple_numbers_from_local_structured_contact(
+    monkeypatch,
+):
+    """Structured contact entries should carry office/mobile/fax numbers from their own block."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "Morgan Smith",
+            "company": "Org Alpha Services",
+            "email": "morgan.smith@anon.invalid",
+            "phone": "+999 170 1112233",
+            "phone_numbers": [
+                {"type": "business", "raw": "+999 170 1112233"},
+                {"type": "mobile", "raw": "+999 171 2223344"},
+                {"type": "fax", "raw": "+999 351 5558801"},
+            ],
+        },
+        source_message_id=13,
+        source_text="""
+Org Alpha Services - Morgan Smith; +999 170 1112233; morgan.smith@anon.invalid
+Mobil: +999 171 2223344
+Fax: +999 351 5558801
+""",
+    )
+
+    assert payload["contact"]["phones"] == [
+        {"type": "business", "raw": "+999 170 1112233", "e164": "+9991701112233"},
+        {"type": "mobile", "raw": "+999 171 2223344", "e164": "+9991712223344"},
+        {"type": "fax", "raw": "+999 351 5558801", "e164": "+9993515558801"},
+    ]
+
+
 def test_build_canonical_contact_payload_keeps_non_german_international_display(monkeypatch):
     """Non-German international numbers should keep their original raw display text."""
 
@@ -99,7 +134,7 @@ def test_build_canonical_contact_payload_keeps_non_german_international_display(
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
-            "full_name": "Robin Beispiel",
+            "full_name": "Robin Smith",
             "phone": "+43 1 2345678",
         },
         source_message_id=10,
@@ -123,7 +158,7 @@ def test_build_canonical_contact_payload_ignores_glued_long_phone_numbers(monkey
         },
         source_message_id=9,
         source_text="""
-Telefon: +49 171 0005343
+Phone: +49 171 0005343
 Mobil: +49159076600234915907660023
 """,
     )
@@ -168,19 +203,19 @@ def test_build_canonical_contact_payload_limits_text_phone_extraction_to_contact
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
-            "full_name": "Jordan Beispiel",
-            "email": "jordan.beispiel@anon.invalid",
+            "full_name": "Jordan Smith",
+            "email": "jordan.smith@anon.invalid",
             "phone": "+49 30 100012",
         },
         source_message_id=12,
         source_text="""
 Mobil: +49 177 0002663
-E-Mail: backup.person@anon.invalid
+Email: backup.person@anon.invalid
 
-Von: Beispiel, Jordan <jordan.beispiel@anon.invalid>
-Telefon: +49 30 100012
+From: Smith, Jordan <jordan.smith@anon.invalid>
+Phone: +49 30 100012
 Mobil: +49 151 0003316
-E-Mail: jordan.beispiel@anon.invalid
+Email: jordan.smith@anon.invalid
 """,
     )
 
@@ -198,6 +233,29 @@ def test_build_canonical_contact_payload_requires_phone():
             {"is_allowed": True, "full_name": "No Phone", "phone": ""},
             source_message_id=1,
         )
+
+
+def test_build_canonical_contact_payload_uses_company_as_display_name_fallback(monkeypatch):
+    """Contacts without a valid person name should fall back to the company name."""
+
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
+
+    payload = build_canonical_contact_payload(
+        {
+            "is_allowed": True,
+            "full_name": "",
+            "_display_name_fallback": "ANONYM Print",
+            "company": "ANONYM Print",
+            "email": "service@anon.invalid",
+            "phone": "0351 20 44 444",
+        },
+        source_message_id=14,
+    )
+
+    assert payload["contact"]["full_name"] == "ANONYM Print"
+    assert payload["contact"]["given_name"] == ""
+    assert payload["contact"]["surname"] == ""
+    assert payload["contact"]["company"] == "ANONYM Print"
 
 
 def test_send_canonical_contact_payload_returns_parsed_json(monkeypatch):
@@ -242,6 +300,7 @@ def test_send_canonical_contact_payload_wraps_http_error(monkeypatch):
 
     with pytest.raises(RuntimeError, match="HTTP 400"):
         send_canonical_contact_payload({"schema_version": "1.0"})
+
 
 
 

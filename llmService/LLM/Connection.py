@@ -54,21 +54,22 @@ _SIGNATURE_NAME_HINT_RE = re.compile(
 )
 _MAIL_PREAMBLE_SCAN_LIMIT = 20
 _MAIL_HEADER_RE = re.compile(
-    r"^(von|from|an|to|cc|bcc|betreff|subject|gesendet|sent|datum|date)\s*:",
+    r"^(von|from|an|to|cc|bcc|kopie|copy|antwort an|reply-to|reply to|betreff|subject|gesendet|sent|datum|date)\s*:",
     flags=re.IGNORECASE,
 )
 _MAIL_HEADER_KEY_RE = re.compile(
-    r"^(von|from|an|to|cc|bcc|betreff|subject|gesendet|sent|datum|date)\s*:",
+    r"^(von|from|an|to|cc|bcc|kopie|copy|antwort an|reply-to|reply to|betreff|subject|gesendet|sent|datum|date)\s*:",
     flags=re.IGNORECASE,
 )
 _MAIL_HEADER_LABEL_RE = re.compile(
-    r"^(von|from|an|to|cc|bcc|betreff|subject|gesendet|sent|datum|date)\s*$",
+    r"^(von|from|an|to|cc|bcc|kopie|copy|antwort an|reply-to|reply to|betreff|subject|gesendet|sent|datum|date)\s*$",
     flags=re.IGNORECASE,
 )
 _MAIL_HEADER_TEXT_RE = re.compile(
     r"^(gesendet\s+am|sent\s+on|am\s+.+\s+schrieb|on\s+.+\s+wrote)\b",
     flags=re.IGNORECASE,
 )
+_SUBJECT_PREFIX_RE = re.compile(r"^(wg|aw|fw|fwd)\s*:", flags=re.IGNORECASE)
 _FORWARDED_HEADER_RE = re.compile(
     r"^-+\s*(urspruengliche nachricht|original message|weitergeleitete nachricht|forwarded message)\s*-+$",
     flags=re.IGNORECASE,
@@ -260,6 +261,7 @@ def _looks_like_mail_header_line(line: str) -> bool:
 
     return bool(
         _mail_header_key(normalized)
+        or _SUBJECT_PREFIX_RE.match(normalized)
         or _MAIL_HEADER_TEXT_RE.match(normalized)
         or _FORWARDED_HEADER_RE.match(normalized)
         or _FORWARDED_TEXT_RE.match(normalized)
@@ -523,35 +525,61 @@ def _strip_signature_preamble(signature: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _split_mail_context_and_signature(mail: str) -> tuple[str, str]:
-    """Split one mail into context and signature sections for separate model calls."""
+def _find_signature_start(lines: list[str]) -> int | None:
+    """Locate the start index of one signature block within split mail lines."""
+
+    for idx, line in enumerate(lines):
+        if _is_signature_marker_line(line):
+            return idx
+
+    return _infer_signature_start(lines)
+
+
+def _prepare_signature_extraction_source(signature: str) -> str:
+    """Keep local signature content for deterministic extraction, including the name line."""
+
+    raw_signature = "" if signature is None else str(signature)
+    lines = raw_signature.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+    while lines and not lines[0].strip():
+        lines.pop(0)
+
+    if not lines:
+        return ""
+
+    lines = _strip_signature_header_tail(lines)
+    return "\n".join(lines).strip()
+
+
+def _split_mail_context_and_signature_segments(mail: str) -> tuple[str, str, str]:
+    """Split one mail into prompt context, prompt signature, and extraction signature source."""
 
     raw_mail = "" if mail is None else str(mail)
     normalized_mail = raw_mail.replace("\r\n", "\n").replace("\r", "\n")
     if not normalized_mail.strip():
-        return "", ""
+        return "", "", ""
 
     lines = normalized_mail.split("\n")
-
-    signature_start: int | None = None
-    for idx, line in enumerate(lines):
-        if _is_signature_marker_line(line):
-            signature_start = idx
-            break
+    signature_start = _find_signature_start(lines)
 
     if signature_start is None:
-        signature_start = _infer_signature_start(lines)
-
-    if signature_start is None:
-        return _strip_mail_preamble(normalized_mail), ""
+        return _strip_mail_preamble(normalized_mail), "", ""
 
     context = "\n".join(lines[:signature_start]).strip()
-    signature = "\n".join(lines[signature_start:]).strip()
+    raw_signature = "\n".join(lines[signature_start:]).strip()
     context = _strip_mail_preamble(context)
-    signature = _strip_signature_preamble(signature)
+    signature = _strip_signature_preamble(raw_signature)
+    signature_source = _prepare_signature_extraction_source(raw_signature)
 
-    if not signature:
-        return _strip_mail_preamble(normalized_mail), ""
+    if not signature and not signature_source:
+        return _strip_mail_preamble(normalized_mail), "", ""
+    return context, signature, signature_source
+
+
+def _split_mail_context_and_signature(mail: str) -> tuple[str, str]:
+    """Split one mail into context and signature sections for separate model calls."""
+
+    context, signature, _signature_source = _split_mail_context_and_signature_segments(mail)
     return context, signature
 
 
@@ -688,15 +716,26 @@ def llm_connection_with_disposition(mail: str) -> dict:
     mail_parts = _split_mail_thread(mail)
     segments: list[tuple[str, str, str]] = []
     clean_mail_sources: list[str] = []
+    signature_extraction_sources: list[str] = []
     for mail_part in mail_parts:
-        context_mail, signature_mail = _split_mail_context_and_signature(mail_part)
-        clean_mail_source = _compose_clean_mail_source(context_mail, signature_mail)
+        stripped_mail_part = _strip_mail_headers_everywhere(mail_part)
+        context_mail, signature_mail, signature_source_mail = _split_mail_context_and_signature_segments(
+            stripped_mail_part
+        )
+        context_mail = _strip_mail_headers_everywhere(context_mail)
+        signature_mail = _strip_mail_headers_everywhere(signature_mail)
+        signature_source_mail = _strip_mail_headers_everywhere(signature_source_mail)
+        clean_mail_source = _strip_mail_headers_everywhere(
+            _compose_clean_mail_source(context_mail, signature_mail)
+        )
         if clean_mail_source:
             clean_mail_sources.append(clean_mail_source)
+        if signature_source_mail:
+            signature_extraction_sources.append(signature_source_mail)
         segments.extend(
             [
-                ("context", context_mail, clean_mail_source),
-                ("signature", signature_mail, clean_mail_source),
+                ("context", context_mail, context_mail),
+                ("signature", signature_mail, signature_mail),
             ]
         )
 
@@ -737,8 +776,12 @@ def llm_connection_with_disposition(mail: str) -> dict:
         list_contacts.extend(
             _attach_source_text(_extract_structured_contacts_from_mail(clean_mail_source), clean_mail_source)
         )
+    for signature_source_mail in signature_extraction_sources:
         signature_contacts.extend(
-            _attach_source_text(_extract_signature_contacts_from_mail(clean_mail_source), clean_mail_source)
+            _attach_source_text(
+                _extract_signature_contacts_from_mail(signature_source_mail),
+                signature_source_mail,
+            )
         )
     contacts = _dedupe_contacts(normalized_contacts + list_contacts + signature_contacts)
 
@@ -799,35 +842,55 @@ def _strip_mail_headers_everywhere(mail: str) -> str:
     lines = raw_mail.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
     cleaned: list[str] = []
-    skipping_header_continuation = False
+    idx = 0
 
-    for line in lines:
+    while idx < len(lines):
+        line = lines[idx]
         stripped = line.strip()
         normalized = _normalize_preamble_line(line)
 
         if not stripped:
-            skipping_header_continuation = False
-            cleaned.append(line)
+            cleaned.append("")
+            idx += 1
             continue
 
-        if (
-            _MAIL_HEADER_NAME_RE.match(line)
+        is_header_start = bool(
+            _mail_header_key(line)
             or _FORWARD_INTRO_RE.match(normalized)
             or _REPLY_INTRO_RE.match(normalized)
-        ):
-            skipping_header_continuation = True
+        )
+        if not is_header_start:
+            if not (_is_leading_header_artifact_line(line) and cleaned and not cleaned[-1].strip()):
+                cleaned.append(line)
+            idx += 1
             continue
 
-        # RFC-style folded header continuation:
-        #   To: foo@example.com,
-        #       bar@example.com
-        # Also catches fragments created by HTML-to-text
-        if skipping_header_continuation:
-            if line[:1].isspace() or stripped.startswith(",") or re.search(r"<[^>]*@[^>]*$", stripped):
-                continue
-            skipping_header_continuation = False
+        idx += 1
+        while idx < len(lines):
+            next_line = lines[idx]
+            next_stripped = next_line.strip()
+            if not next_stripped:
+                idx += 1
+                break
 
-        cleaned.append(line)
+            if (
+                _mail_header_key(next_line)
+                or _looks_like_greeting_line(next_stripped)
+                or _is_signature_marker_line(next_stripped)
+                or _is_quoted_history_intro_line(next_stripped)
+            ):
+                break
+
+            if (
+                next_line[:1].isspace()
+                or next_stripped.startswith((",", ";"))
+                or _is_leading_header_artifact_line(next_line)
+                or EMAIL_RE.search(next_stripped)
+            ):
+                idx += 1
+                continue
+
+            break
 
     result = "\n".join(cleaned)
 

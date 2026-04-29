@@ -28,7 +28,7 @@ def test_main_marks_operated_for_synced_or_explicitly_irrelevant(monkeypatch):
     decision_mock = Mock(
         side_effect=[
             {
-                "contacts": [{"is_allowed": True, "full_name": "Alex Beispiel", "phone": "+999 100200"}],
+                "contacts": [{"is_allowed": True, "full_name": "Alex Smith", "phone": "+999 100200"}],
                 "disposition": "relevant",
             },
             {"contacts": [], "disposition": "irrelevant"},
@@ -49,7 +49,7 @@ def test_main_marks_operated_for_synced_or_explicitly_irrelevant(monkeypatch):
     decision_mock.assert_has_calls([call("One"), call("Two")])
     sync_mock.assert_called_once_with(
         1,
-        [{"is_allowed": True, "full_name": "Alex Beispiel", "phone": "+999 100200"}],
+        [{"is_allowed": True, "full_name": "Alex Smith", "phone": "+999 100200"}],
         "One",
     )
     fake_db.mark_operated.assert_has_calls([call("Inbox", 1), call("Inbox", 2)])
@@ -70,15 +70,15 @@ def test_sync_contacts_uses_per_contact_source_text(monkeypatch):
     contacts = [
         {
             "is_allowed": True,
-            "full_name": "Kontakt Eins",
+            "full_name": "Contact One",
             "phone": "+49 111 111111",
-            "_source_text": "mail part one\nTelefon: +49 111 111111",
+            "_source_text": "mail part one\nPhone: +49 111 111111",
         },
         {
             "is_allowed": True,
-            "full_name": "Kontakt Zwei",
+            "full_name": "Contact Two",
             "phone": "+49 222 222222",
-            "_source_text": "mail part two\nTelefon: +49 222 222222",
+            "_source_text": "mail part two\nPhone: +49 222 222222",
         },
     ]
 
@@ -90,6 +90,40 @@ def test_sync_contacts_uses_per_contact_source_text(monkeypatch):
     assert build_mock.call_args_list[0].kwargs["source_text"] == contacts[0]["_source_text"]
     assert build_mock.call_args_list[1].kwargs["source_text"] == contacts[1]["_source_text"]
     assert send_mock.call_args_list == [call({"payload": "one"}), call({"payload": "two"})]
+
+
+def test_sync_contacts_continues_after_one_contact_fails(monkeypatch):
+    """One bad contact must not stop later contacts from being attempted."""
+
+    build_mock = Mock(
+        side_effect=[
+            ValueError("broken payload"),
+            {"payload": "two"},
+        ]
+    )
+    send_mock = Mock(return_value={"status": "created"})
+
+    contacts = [
+        {
+            "is_allowed": True,
+            "full_name": "Contact One",
+            "phone": "+49 111 111111",
+        },
+        {
+            "is_allowed": True,
+            "full_name": "Contact Two",
+            "phone": "+49 222 222222",
+        },
+    ]
+
+    monkeypatch.setattr(main_module, "build_canonical_contact_payload", build_mock)
+    monkeypatch.setattr(main_module, "send_canonical_contact_payload", send_mock)
+
+    with pytest.raises(RuntimeError, match="Contact One: broken payload"):
+        main_module._sync_contacts(1661, contacts, "thread text")
+
+    assert build_mock.call_count == 2
+    assert send_mock.call_args_list == [call({"payload": "two"})]
 
 
 def test_main_leaves_unknown_messages_unoperated(monkeypatch):
@@ -199,8 +233,8 @@ def test_main_uses_contact_list_when_classifier_returns_list(monkeypatch):
     decision_mock = Mock(
         return_value={
             "contacts": [
-                {"is_allowed": True, "full_name": "Morgan Beispiel", "phone": "+999 170 1112233"},
-                {"is_allowed": True, "full_name": "Riley Beispiel", "phone": "+999 351 5558800"},
+                {"is_allowed": True, "full_name": "Morgan Smith", "phone": "+999 170 1112233"},
+                {"is_allowed": True, "full_name": "Riley Smith", "phone": "+999 351 5558800"},
             ],
             "disposition": "relevant",
         }
@@ -218,8 +252,8 @@ def test_main_uses_contact_list_when_classifier_returns_list(monkeypatch):
     sync_mock.assert_called_once_with(
         1,
         [
-            {"is_allowed": True, "full_name": "Morgan Beispiel", "phone": "+999 170 1112233"},
-            {"is_allowed": True, "full_name": "Riley Beispiel", "phone": "+999 351 5558800"},
+            {"is_allowed": True, "full_name": "Morgan Smith", "phone": "+999 170 1112233"},
+            {"is_allowed": True, "full_name": "Riley Smith", "phone": "+999 351 5558800"},
         ],
         "List Case",
     )

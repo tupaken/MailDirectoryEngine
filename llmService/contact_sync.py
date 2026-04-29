@@ -359,7 +359,12 @@ def build_canonical_contact_payload(
         raise ValueError("contact must be a dictionary")
 
     full_name = _clean_text(contact.get("full_name"))
-    given_name, surname = _split_name(full_name)
+    display_name_fallback = _clean_text(contact.get("_display_name_fallback"))
+    payload_full_name = full_name or display_name_fallback
+    if full_name:
+        given_name, surname = _split_name(full_name)
+    else:
+        given_name, surname = "", ""
 
     phones = _build_phone_items(contact, source_text or "")
     if not phones:
@@ -372,7 +377,7 @@ def build_canonical_contact_payload(
         "schema_version": SCHEMA_VERSION,
         "account_key": account_key,
         "contact": {
-            "full_name": full_name,
+            "full_name": payload_full_name,
             "given_name": given_name,
             "surname": surname,
             "company": _clean_text(contact.get("company")),

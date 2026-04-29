@@ -48,6 +48,11 @@ CONTACT_LIST_LINE_RE = re.compile(
     r"(?:\s*;\s*(?P<email>[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}))?",
     flags=re.IGNORECASE,
 )
+STRUCTURED_CONTACT_CONTINUATION_HINT_RE = re.compile(
+    r"^(telefon|tel\.?|mobil(?:telefon)?|handy|fax|telefax|durchwahl|"
+    r"e-?mail|de-?mail|web(?:site)?|www\.|http)",
+    flags=re.IGNORECASE,
+)
 BUSINESS_LINE_HINTS = (
     "telefon",
     "telefax",
@@ -123,6 +128,15 @@ SIGNATURE_CONTACT_HINT_RE = re.compile(
     r"(telefon|tel\.?|telefax|fax|mobil|handy|durchwahl|e-?mail|web|www\.|http|gmbh|\bag\b|\bug\b|\bkg\b|str\.|stra[sz]e|adresse|hrb|ust)",
     flags=re.IGNORECASE,
 )
+LEGAL_NUMBER_LINE_HINT_RE = re.compile(
+    r"(hrb|hraa|handelsregister|registergericht|amtsgericht|ust|ust-id|umsatzsteuer|steuernummer|tax|iban|bic)",
+    flags=re.IGNORECASE,
+)
+GENERIC_SIGNATURE_FOOTER_HINT_RE = re.compile(
+    r"(vorsitzender|aufsichtsrat|geschaeftsfuehrer|geschaeftsfuehrerin|sitz der gesellschaft|"
+    r"amtsgericht|handelsregister|hrb|ust|www\.|http)",
+    flags=re.IGNORECASE,
+)
 
 NAME_SCORE_INLINE_PHONE_LINE = 4
 NAME_SCORE_LABEL = 3
@@ -196,6 +210,16 @@ GREETING_NAME_PHRASES = {
     "kind regards",
     "many thanks",
     "thanks and regards",
+}
+NON_PERSON_NAME_PHRASES = {
+    "fuer fragen",
+    "for questions",
+    "unser team",
+    "ihr team",
+    "our team",
+    "customer service",
+    "service center",
+    "service-center",
 }
 NON_PERSON_GREETING_TOKENS = {
     "hallo",
@@ -355,7 +379,19 @@ def _looks_like_recipient_distribution_line(line: str) -> bool:
         return False
 
     folded = _ascii_fold(cleaned)
-    header_prefixes = ("an:", "to:", "cc:", "bcc:", "von:", "from:")
+    header_prefixes = (
+        "an:",
+        "to:",
+        "cc:",
+        "bcc:",
+        "kopie:",
+        "copy:",
+        "antwort an:",
+        "reply-to:",
+        "reply to:",
+        "von:",
+        "from:",
+    )
     if folded.startswith(header_prefixes) and cleaned.count("@") >= 1:
         return True
 
@@ -401,7 +437,19 @@ def _is_role_based_name(name: str, mail: str) -> bool:
     for candidate in candidates:
         if not candidate:
             continue
-        escaped_name = re.escape(_ascii_fold(candidate))
+        folded_candidate = _ascii_fold(candidate)
+        escaped_name = re.escape(folded_candidate)
+        matching_lines = [
+            line
+            for line in folded_mail.splitlines()
+            if folded_candidate in line
+        ]
+        if not matching_lines:
+            continue
+
+        if any(not re.search(ROLE_TITLE_PART, line) for line in matching_lines):
+            return False
+
         left_context = rf"{ROLE_TITLE_PART}[^\n\r]{{0,40}}{escaped_name}"
         right_context = rf"{escaped_name}[^\n\r]{{0,40}}{ROLE_TITLE_PART}"
         if bool(re.search(left_context, folded_mail)) or bool(re.search(right_context, folded_mail)):
@@ -466,6 +514,8 @@ def _looks_like_person_name_line(line: str) -> bool:
 
     folded_candidate = _ascii_fold(candidate)
     if folded_candidate in GREETING_NAME_PHRASES:
+        return False
+    if folded_candidate in NON_PERSON_NAME_PHRASES:
         return False
 
     if _contains_business_hint(candidate):
@@ -852,6 +902,186 @@ def _extract_name_from_phone_line(line: str) -> str:
             return candidate
 
     return ""
+
+
+def _normalize_phone_type_hint(value: str) -> str:
+    """Map free-form phone labels to canonical contact phone types."""
+
+    label = _ascii_fold(_clean_text(value))
+    if not label:
+        return "other"
+    if any(token in label for token in ("fax", "telefax")):
+        return "fax"
+    if any(token in label for token in ("mobil", "mobile", "handy", "cell")):
+        return "mobile"
+    if any(token in label for token in ("home", "privat", "private")):
+        return "home"
+    if any(
+        token in label
+        for token in ("telefon", "phone", "tel", "zentrale", "durchwahl", "direct", "office", "work")
+    ):
+        return "business"
+    return "other"
+
+
+def _looks_like_structured_contact_continuation_line(line: str) -> bool:
+    """Return True for lines that belong to one structured contact list item."""
+
+    cleaned = _clean_text(line)
+    if not cleaned:
+        return False
+    if CONTACT_LIST_LINE_RE.search(cleaned):
+        return False
+    if STRUCTURED_CONTACT_CONTINUATION_HINT_RE.search(cleaned):
+        return True
+    if EMAIL_RE.search(cleaned):
+        return True
+    return False
+
+
+def _extract_phone_numbers_from_structured_lines(lines: list[str]) -> list[dict[str, str]]:
+    """Collect typed phone candidates from a structured contact block."""
+
+    extracted: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for idx, line in enumerate(lines):
+        cleaned = _clean_text(line)
+        if not cleaned:
+            continue
+
+        matches = PHONE_RE.findall(cleaned)
+        if not matches:
+            continue
+
+        phone_type = "business" if idx == 0 else _normalize_phone_type_hint(cleaned.split(":", 1)[0])
+
+        for match in matches:
+            raw = _clean_text(match)
+            if not raw:
+                continue
+            digits = _phone_digits(raw)
+            if len(digits) < 6 or len(digits) > MAX_PHONE_DIGITS:
+                continue
+            dedupe_key = (phone_type, digits)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            extracted.append({"type": phone_type, "raw": raw})
+
+    return extracted
+
+
+_SIGNATURE_HEADER_OR_HISTORY_RE = re.compile(
+    r"^(von|from|an|to|cc|bcc|betreff|subject|gesendet|sent|datum|date)\s*:|"
+    r"^(am\s+.+\s+schrieb|on\s+.+\s+wrote|gesendet\s+am|sent\s+on)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _extract_phone_numbers_from_signature_lines(lines: list[str]) -> list[dict[str, str]]:
+    """Collect typed phone candidates from one signature block."""
+
+    extracted: list[dict[str, str]] = []
+    seen_digits: set[str] = set()
+
+    for line in lines:
+        cleaned = _clean_text(line)
+        if not cleaned:
+            continue
+        if LEGAL_NUMBER_LINE_HINT_RE.search(cleaned):
+            continue
+        if "•" in cleaned and GENERIC_SIGNATURE_FOOTER_HINT_RE.search(cleaned):
+            continue
+
+        matches = PHONE_RE.findall(cleaned)
+        if not matches:
+            continue
+        if "•" in cleaned and len(matches) >= 2 and not EMAIL_RE.search(cleaned):
+            continue
+
+        type_hint = cleaned.split(":", 1)[0] if ":" in cleaned else cleaned
+        phone_type = _normalize_phone_type_hint(type_hint)
+
+        for match in matches:
+            raw = _clean_text(match)
+            digits = _phone_digits(raw)
+            if len(digits) < 6 or len(digits) > MAX_PHONE_DIGITS:
+                continue
+            if digits in seen_digits:
+                continue
+            seen_digits.add(digits)
+            extracted.append({"type": phone_type, "raw": raw})
+
+    return extracted
+
+
+def _choose_primary_phone_from_numbers(
+    phone_numbers: list[dict[str, str]],
+    fallback: str = "",
+) -> str:
+    """Choose the best primary phone from typed phone entries."""
+
+    type_priority = ("business", "mobile", "home", "other", "fax")
+    for preferred_type in type_priority:
+        for phone_item in phone_numbers:
+            if not isinstance(phone_item, dict):
+                continue
+            if _clean_text(phone_item.get("type")) != preferred_type:
+                continue
+            raw = _clean_text(phone_item.get("raw") or phone_item.get("e164"))
+            if raw:
+                return raw
+    return _clean_text(fallback)
+
+
+def _looks_like_generic_signature_footer_anchor(line: str) -> bool:
+    """Detect company/legal footer lines that should not start a personal contact block."""
+
+    cleaned = _clean_text(line)
+    if not cleaned:
+        return False
+    if LEGAL_NUMBER_LINE_HINT_RE.search(cleaned):
+        return True
+    if "•" not in cleaned:
+        return False
+    if not GENERIC_SIGNATURE_FOOTER_HINT_RE.search(cleaned):
+        return False
+    return len(PHONE_RE.findall(cleaned)) >= 1
+
+
+def _signature_contact_block_bounds(lines: list[str], anchor_index: int) -> tuple[int, int]:
+    """Find a compact local signature block around one phone line."""
+
+    start = anchor_index
+    max_up = max(0, anchor_index - 8)
+    while start > max_up:
+        previous_line = _clean_text(lines[start - 1])
+        if not previous_line:
+            break
+        if _looks_like_recipient_distribution_line(previous_line):
+            break
+        if _SIGNATURE_HEADER_OR_HISTORY_RE.match(previous_line):
+            break
+        if re.fullmatch(r"-{5,}", previous_line):
+            break
+        start -= 1
+
+    end = anchor_index
+    max_down = min(len(lines) - 1, anchor_index + 8)
+    while end < max_down:
+        next_line = _clean_text(lines[end + 1])
+        if not next_line:
+            break
+        if _looks_like_recipient_distribution_line(next_line):
+            break
+        if _SIGNATURE_HEADER_OR_HISTORY_RE.match(next_line):
+            break
+        if re.fullmatch(r"-{5,}", next_line):
+            break
+        end += 1
+
+    return start, end
 
 
 def _extract_name_from_mail(mail: str, phone: str = "") -> str:
@@ -1250,7 +1480,11 @@ def _normalize_llm_result(parsed: dict, mail: str) -> dict:
             if inferred_name and not _is_placeholder(inferred_name):
                 normalized["full_name"] = inferred_name
     if not normalized.get("full_name"):
-        return {"is_allowed": False}
+        company_display_name = _clean_text(normalized.get("company", ""))
+        if company_display_name:
+            normalized["_display_name_fallback"] = company_display_name
+        else:
+            return {"is_allowed": False}
 
     # Prevent cross-mixed identity fields (name from one person, email of another).
     email_value = _clean_text(normalized.get("email", ""))
@@ -1305,6 +1539,28 @@ def _contact_dedupe_key(contact: dict) -> tuple[str, str, str]:
     return (phone_key, email_key, name_key)
 
 
+def _contact_phone_digit_keys(contact: dict) -> set[str]:
+    """Collect all phone digit variants from one contact for overlap checks."""
+
+    keys: set[str] = set()
+
+    phone_value = _clean_text(contact.get("phone"))
+    phone_digits = _phone_digits(phone_value)
+    if phone_digits:
+        keys.add(phone_digits)
+
+    phone_numbers = contact.get("phone_numbers")
+    if isinstance(phone_numbers, list):
+        for item in phone_numbers:
+            if not isinstance(item, dict):
+                continue
+            digits = _phone_digits(_clean_text(item.get("raw") or item.get("e164")))
+            if digits:
+                keys.add(digits)
+
+    return keys
+
+
 def _dedupe_contacts(contacts: list[dict]) -> list[dict]:
     """Remove duplicate contacts while preserving first-seen order and richer data."""
 
@@ -1312,9 +1568,68 @@ def _dedupe_contacts(contacts: list[dict]) -> list[dict]:
     seen: set[tuple[str, str, str]] = set()
 
     def merge_missing(existing: dict, incoming: dict) -> None:
+        existing_has_person_name = bool(_clean_text(existing.get("full_name")))
+        incoming_has_person_name = bool(_clean_text(incoming.get("full_name")))
+
         for field in ALLOWED_FIELDS:
             if not _clean_text(existing.get(field)) and _clean_text(incoming.get(field)):
                 existing[field] = incoming.get(field)
+
+        merged_phone_numbers: list[dict] = []
+        seen_phone_keys: set[tuple[str, str]] = set()
+
+        def add_phone_number_item(phone_type: str, raw_value: object) -> None:
+            raw = _clean_text(raw_value)
+            digits = _phone_digits(raw)
+            if not digits:
+                return
+            normalized_type = _clean_text(phone_type) or "other"
+            key = (normalized_type, digits)
+            if key in seen_phone_keys:
+                return
+            seen_phone_keys.add(key)
+            merged_phone_numbers.append({"type": normalized_type, "raw": raw})
+
+        existing_phone_numbers = existing.get("phone_numbers")
+        incoming_phone_numbers = incoming.get("phone_numbers")
+        had_explicit_phone_numbers = isinstance(existing_phone_numbers, list) or isinstance(
+            incoming_phone_numbers, list
+        )
+        if incoming_has_person_name and not existing_has_person_name:
+            add_phone_number_item("business", incoming.get("phone"))
+            add_phone_number_item("business", existing.get("phone"))
+        else:
+            add_phone_number_item("business", existing.get("phone"))
+            add_phone_number_item("business", incoming.get("phone"))
+        if isinstance(incoming_phone_numbers, list):
+            for item in existing_phone_numbers if isinstance(existing_phone_numbers, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                add_phone_number_item(
+                    _clean_text(item.get("type")) or "other",
+                    item.get("raw") or item.get("e164"),
+                )
+            for item in incoming_phone_numbers:
+                if not isinstance(item, dict):
+                    continue
+                add_phone_number_item(
+                    _clean_text(item.get("type")) or "other",
+                    item.get("raw") or item.get("e164"),
+                )
+        elif isinstance(existing_phone_numbers, list):
+            for item in existing_phone_numbers:
+                if not isinstance(item, dict):
+                    continue
+                add_phone_number_item(
+                    _clean_text(item.get("type")) or "other",
+                    item.get("raw") or item.get("e164"),
+                )
+        if merged_phone_numbers and (had_explicit_phone_numbers or len(merged_phone_numbers) > 1):
+            existing["phone_numbers"] = merged_phone_numbers
+            existing["phone"] = _choose_primary_phone_from_numbers(
+                merged_phone_numbers,
+                fallback=_clean_text(existing.get("phone") or incoming.get("phone")),
+            )
         existing_source = _clean_text(existing.get("_source_text"))
         incoming_source = _clean_text(incoming.get("_source_text"))
         if not existing_source and incoming_source:
@@ -1351,6 +1666,37 @@ def _dedupe_contacts(contacts: list[dict]) -> list[dict]:
                     break
             if merged:
                 continue
+        incoming_has_person_name = bool(_clean_text(contact.get("full_name")))
+        if incoming_has_person_name:
+            merged = False
+            incoming_phone_keys = _contact_phone_digit_keys(contact)
+            for existing in deduped:
+                existing_has_person_name = bool(_clean_text(existing.get("full_name")))
+                if existing_has_person_name:
+                    continue
+                existing_email = _clean_text(existing.get("email")).casefold()
+                incoming_email = _clean_text(contact.get("email")).casefold()
+                shared_email = bool(existing_email and incoming_email and existing_email == incoming_email)
+                shared_phone = bool(_contact_phone_digit_keys(existing) & incoming_phone_keys)
+                if shared_email or shared_phone:
+                    merge_missing(existing, contact)
+                    seen.add(key)
+                    merged = True
+                    break
+            if merged:
+                continue
+        if name_key and email_key:
+            merged = False
+            for existing in deduped:
+                existing_key = _contact_dedupe_key(existing)
+                same_name_and_email = existing_key[1] == email_key and existing_key[2] == name_key
+                if same_name_and_email:
+                    merge_missing(existing, contact)
+                    seen.add(key)
+                    merged = True
+                    break
+            if merged:
+                continue
         seen.add(key)
         deduped.append(contact)
     return deduped
@@ -1378,20 +1724,20 @@ def _extract_structured_contacts_from_mail(mail: str) -> list[dict]:
         email_match = EMAIL_RE.search(line)
         email = _clean_text(email_match.group(0)) if email_match else ""
         source_lines = [line]
-        if not email:
-            # Some mail cleaners split "company/name/phone;" and email onto the next line.
-            end = min(len(lines), idx + 4)
-            for next_idx in range(idx + 1, end):
-                next_line = lines[next_idx]
-                if not next_line:
-                    continue
-                if CONTACT_LIST_LINE_RE.search(next_line):
-                    break
+        end = min(len(lines), idx + 6)
+        for next_idx in range(idx + 1, end):
+            next_line = lines[next_idx]
+            if not next_line:
+                continue
+            if CONTACT_LIST_LINE_RE.search(next_line):
+                break
+            if not _looks_like_structured_contact_continuation_line(next_line):
+                break
+            source_lines.append(next_line)
+            if not email:
                 next_email_match = EMAIL_RE.search(next_line)
                 if next_email_match:
                     email = _clean_text(next_email_match.group(0))
-                    source_lines.append(next_line)
-                    break
 
         parsed = {
             "is_allowed": True,
@@ -1405,6 +1751,9 @@ def _extract_structured_contacts_from_mail(mail: str) -> list[dict]:
         normalized = _normalize_llm_result(parsed, str(mail))
         if normalized.get("is_allowed") is True:
             normalized["_source_text"] = "\n".join(source_lines).strip()
+            phone_numbers = _extract_phone_numbers_from_structured_lines(source_lines)
+            if phone_numbers:
+                normalized["phone_numbers"] = phone_numbers
             extracted.append(normalized)
 
     return _dedupe_contacts(extracted)
@@ -1450,6 +1799,8 @@ def _extract_signature_contacts_from_mail(mail: str) -> list[dict]:
         folded = _ascii_fold(line)
         if not re.search(r"\b(telefon|tel\.?|mobil|handy|durchwahl)\b", folded):
             continue
+        if _looks_like_generic_signature_footer_anchor(line):
+            continue
 
         phone_match = PHONE_RE.search(line)
         if not phone_match:
@@ -1464,12 +1815,20 @@ def _extract_signature_contacts_from_mail(mail: str) -> list[dict]:
         if phone_digits in seen_phone_digits:
             continue
 
-        # Prefer nearest email line in a compact neighborhood around the phone line.
+        block_start, block_end = _signature_contact_block_bounds(lines, idx)
+        block_lines = [block_line for block_line in lines[block_start : block_end + 1] if block_line]
+        if not block_lines:
+            continue
+
+        phone_numbers = _extract_phone_numbers_from_signature_lines(block_lines)
+        if not phone_numbers:
+            continue
+        primary_phone = _choose_primary_phone_from_numbers(phone_numbers, fallback=phone_value)
+
+        # Prefer nearest email line in the local signature block before falling back to a small neighborhood.
         email_value = ""
         best_distance = 999
-        start = max(0, idx - 8)
-        end = min(len(lines), idx + 9)
-        for cand_idx in range(start, end):
+        for cand_idx in range(block_start, block_end + 1):
             cand_line = lines[cand_idx]
             if not cand_line or _looks_like_recipient_distribution_line(cand_line):
                 continue
@@ -1480,23 +1839,44 @@ def _extract_signature_contacts_from_mail(mail: str) -> list[dict]:
             if distance < best_distance:
                 best_distance = distance
                 email_value = _clean_text(email_match.group(0))
+        if not email_value:
+            start = max(0, idx - 8)
+            end = min(len(lines), idx + 9)
+            for cand_idx in range(start, end):
+                cand_line = lines[cand_idx]
+                if not cand_line or _looks_like_recipient_distribution_line(cand_line):
+                    continue
+                email_match = EMAIL_RE.search(cand_line)
+                if not email_match:
+                    continue
+                distance = abs(cand_idx - idx)
+                if distance < best_distance:
+                    best_distance = distance
+                    email_value = _clean_text(email_match.group(0))
 
         full_name = _extract_local_name_near_phone(idx)
         if not full_name:
-            full_name = _extract_name_from_mail(mail_text, phone_value)
+            full_name = _extract_name_from_mail(mail_text, primary_phone)
         parsed = {
             "is_allowed": True,
             "full_name": full_name,
             "company": "",
             "email": email_value,
-            "phone": phone_value,
+            "phone": primary_phone,
             "address": "",
             "website": "",
         }
         normalized = _normalize_llm_result(parsed, mail_text)
         if normalized.get("is_allowed") is True:
+            normalized["phone_numbers"] = phone_numbers
+            normalized["_source_text"] = "\n".join(block_lines).strip()
             extracted.append(normalized)
-            seen_phone_digits.add(phone_digits)
+            for phone_item in phone_numbers:
+                if not isinstance(phone_item, dict):
+                    continue
+                item_digits = _phone_digits(_clean_text(phone_item.get("raw") or phone_item.get("e164")))
+                if item_digits:
+                    seen_phone_digits.add(item_digits)
 
     return _dedupe_contacts(extracted)
 
