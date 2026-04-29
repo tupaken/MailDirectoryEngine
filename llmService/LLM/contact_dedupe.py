@@ -47,6 +47,8 @@ def _dedupe_contacts(contacts: list[dict]) -> list[dict]:
     seen: set[tuple[str, str, str]] = set()
 
     def merge_missing(existing: dict, incoming: dict) -> None:
+        """Merge richer incoming fields into an already selected contact."""
+
         existing_has_person_name = bool(_clean_text(existing.get("full_name")))
         incoming_has_person_name = bool(_clean_text(incoming.get("full_name")))
 
@@ -58,6 +60,8 @@ def _dedupe_contacts(contacts: list[dict]) -> list[dict]:
         seen_phone_keys: set[tuple[str, str]] = set()
 
         def add_phone_number_item(phone_type: str, raw_value: object) -> None:
+            """Append one deduplicated phone-number entry to the merged contact."""
+
             raw = _clean_text(raw_value)
             digits = _phone_digits(raw)
             if not digits:

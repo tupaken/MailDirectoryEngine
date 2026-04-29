@@ -1124,6 +1124,8 @@ def _extract_name_from_mail(mail: str, phone: str = "") -> str:
     scored_candidates: dict[str, tuple[int, int, int, str]] = {}
 
     def _add_scored_candidate(candidate: str, line_idx: int, base_score: int) -> None:
+        """Validate and score one person-name candidate found near contact data."""
+
         if 0 <= line_idx < len(lines):
             if _looks_like_recipient_distribution_line(lines[line_idx]):
                 return

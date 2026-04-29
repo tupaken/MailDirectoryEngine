@@ -95,6 +95,8 @@ def _extract_signature_contacts_from_mail(mail: str) -> list[dict]:
     seen_phone_digits: set[str] = set()
 
     def _extract_local_name_near_phone(line_index: int) -> str:
+        """Find the nearest valid person-name line above a phone anchor."""
+
         up_start = max(0, line_index - 10)
         up_end = line_index
         for cand_idx in range(up_end - 1, up_start - 1, -1):

@@ -14,6 +14,8 @@ class StorageServiceError(RuntimeError):
     """Raised when StorageService returns a structured HTTP error response."""
 
     def __init__(self, endpoint: str, status_code: int, response_message: str):
+        """Store the failed endpoint, HTTP status, and structured error message."""
+
         self.endpoint = endpoint
         self.status_code = status_code
         self.response_message = response_message

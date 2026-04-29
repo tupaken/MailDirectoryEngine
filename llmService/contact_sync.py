@@ -1,8 +1,11 @@
-"""Canonical contact payload + HTTP client for ContactService integration.
+"""Canonical ContactService payload mapping.
 
 Phone numbers are emitted in two parallel forms:
 - ``raw`` keeps a human-readable display format.
 - ``e164`` keeps a machine-friendly international representation when available.
+
+The actual HTTP call lives in ``llmService.API.ContactService``; this module
+keeps payload construction and a compatibility wrapper for existing imports.
 """
 
 import os
@@ -270,6 +273,8 @@ def _collect_phone_candidates(contact: dict, source_text: str) -> list[tuple[str
     candidates: list[tuple[str, str]] = []
 
     def add_candidate(phone_type: str, value: object) -> None:
+        """Append one validated phone candidate with a normalized type label."""
+
         raw = _clean_text(value)
         if not raw:
             return

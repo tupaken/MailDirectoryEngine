@@ -1,3 +1,5 @@
+"""Regex pattern collections used by LLM mail preprocessing."""
+
 GREETING_PATTERNS = (
     # sehr formal
     r"^sehr geehrte damen und herren[,]?$",
