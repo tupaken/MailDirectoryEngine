@@ -22,6 +22,14 @@ class HtmlCleanerTests(unittest.TestCase):
         """Empty HTML input should return an empty string."""
         self.assertEqual("", html_to_text(""))
 
+    def test_html_to_text_removes_standalone_reference_delimiters(self):
+        """HTML-to-text conversion should drop quote/reference delimiter leftovers."""
+        html = "<div>From:</div><div>&quot; &lt;</div><div>alex@example.invalid</div><div>&gt;</div><div>Body</div>"
+
+        result = html_to_text(html)
+
+        self.assertEqual("From:\nalex@example.invalid\nBody", result)
+
     def test_subject_from_send_reads_subject_header_from_eml(self):
         """Raw `.eml` files should expose their Subject header."""
 

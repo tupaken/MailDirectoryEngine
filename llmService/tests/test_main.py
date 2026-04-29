@@ -56,6 +56,42 @@ def test_main_marks_operated_for_synced_or_explicitly_irrelevant(monkeypatch):
     assert call("Message 2 marked operated: irrelevant") in print_mock.mock_calls
 
 
+def test_sync_contacts_uses_per_contact_source_text(monkeypatch):
+    """Each contact should be enriched from its own mail part, not the full thread."""
+
+    build_mock = Mock(
+        side_effect=[
+            {"payload": "one"},
+            {"payload": "two"},
+        ]
+    )
+    send_mock = Mock(return_value={"status": "created"})
+
+    contacts = [
+        {
+            "is_allowed": True,
+            "full_name": "Kontakt Eins",
+            "phone": "+49 111 111111",
+            "_source_text": "mail part one\nTelefon: +49 111 111111",
+        },
+        {
+            "is_allowed": True,
+            "full_name": "Kontakt Zwei",
+            "phone": "+49 222 222222",
+            "_source_text": "mail part two\nTelefon: +49 222 222222",
+        },
+    ]
+
+    monkeypatch.setattr(main_module, "build_canonical_contact_payload", build_mock)
+    monkeypatch.setattr(main_module, "send_canonical_contact_payload", send_mock)
+
+    main_module._sync_contacts(1661, contacts, "full thread with both phone numbers")
+
+    assert build_mock.call_args_list[0].kwargs["source_text"] == contacts[0]["_source_text"]
+    assert build_mock.call_args_list[1].kwargs["source_text"] == contacts[1]["_source_text"]
+    assert send_mock.call_args_list == [call({"payload": "one"}), call({"payload": "two"})]
+
+
 def test_main_leaves_unknown_messages_unoperated(monkeypatch):
     """Unknown decision state must not mark a row as operated."""
 

@@ -2,6 +2,7 @@
 
 from email import policy
 from email.parser import BytesParser
+import re
 
 from bs4 import BeautifulSoup
 
@@ -10,7 +11,14 @@ def html_to_text(html: str) -> str:
     """Convert HTML mail bodies into normalized plain text."""
 
     soup = BeautifulSoup(html, "html.parser")
-    return soup.get_text("\n", strip=True)
+    text = soup.get_text("\n", strip=True)
+    lines = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if re.fullmatch(r"[\s<>\"']+", line):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def subject_from_send(email: str) -> str | None:

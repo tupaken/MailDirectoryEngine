@@ -186,7 +186,7 @@ public class CanonicalContactMapperTests
                 Address: address,
                 Website: "example.test",
                 Notes: notes),
-            AccountKey: "bewerbung",
+            AccountKey: "testaccount",
             SourceMessageId: sourceMessageId);
     }
 }

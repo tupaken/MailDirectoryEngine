@@ -26,7 +26,7 @@ public class CanonicalContactValidatorTests
         var payload = new CanonicalContactEnvelopeDto(
             SchemaVersion: "2.0",
             Contact: BuildContact(),
-            AccountKey: "bewerbung",
+            AccountKey: "testaccount",
             SourceMessageId: "mail-1");
 
         var error = CanonicalContactValidator.Validate(payload);
@@ -45,7 +45,7 @@ public class CanonicalContactValidatorTests
         var payload = new CanonicalContactEnvelopeDto(
             SchemaVersion: CanonicalContactSchema.Version,
             Contact: null!,
-            AccountKey: "bewerbung",
+            AccountKey: "testaccount",
             SourceMessageId: "mail-1");
 
         var error = CanonicalContactValidator.Validate(payload);
@@ -74,7 +74,7 @@ public class CanonicalContactValidatorTests
                 Address: null,
                 Website: null,
                 Notes: null),
-            AccountKey: "bewerbung",
+            AccountKey: "testaccount",
             SourceMessageId: null);
 
         var error = CanonicalContactValidator.Validate(payload);
@@ -105,7 +105,7 @@ public class CanonicalContactValidatorTests
                 Address: null,
                 Website: null,
                 Notes: null),
-            AccountKey: "bewerbung",
+            AccountKey: "testaccount",
             SourceMessageId: null);
 
         var error = CanonicalContactValidator.Validate(payload);
@@ -122,7 +122,7 @@ public class CanonicalContactValidatorTests
         var payload = new CanonicalContactEnvelopeDto(
             SchemaVersion: CanonicalContactSchema.Version,
             Contact: BuildContact(),
-            AccountKey: "bewerbung",
+            AccountKey: "testaccount",
             SourceMessageId: "mail-1");
 
         var error = CanonicalContactValidator.Validate(payload);

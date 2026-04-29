@@ -15,7 +15,7 @@ from llmService.contact_sync import (
 def test_build_canonical_contact_payload_maps_llm_shape(monkeypatch):
     """LLM normalized contact should map to the shared canonical schema."""
 
-    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
 
     payload = build_canonical_contact_payload(
         {
@@ -31,7 +31,7 @@ def test_build_canonical_contact_payload_maps_llm_shape(monkeypatch):
     )
 
     assert payload["schema_version"] == "1.0"
-    assert payload["account_key"] == "bewerbung"
+    assert payload["account_key"] == "testaccount"
     assert payload["source_message_id"] == "42"
     assert payload["contact"]["given_name"] == "Robin"
     assert payload["contact"]["surname"] == "Beispiel"
@@ -45,7 +45,7 @@ def test_build_canonical_contact_payload_extracts_fax_mobile_and_other_from_sour
 ):
     """Source text should contribute additional labeled phone numbers."""
 
-    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
 
     payload = build_canonical_contact_payload(
         {
@@ -72,7 +72,7 @@ Zentrale: +49 30 123458
 def test_build_canonical_contact_payload_formats_0049_and_e164_phone_sources(monkeypatch):
     """German numbers from 0049 and e164 inputs should use the shared raw display format."""
 
-    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
 
     payload = build_canonical_contact_payload(
         {
@@ -94,7 +94,7 @@ def test_build_canonical_contact_payload_formats_0049_and_e164_phone_sources(mon
 def test_build_canonical_contact_payload_keeps_non_german_international_display(monkeypatch):
     """Non-German international numbers should keep their original raw display text."""
 
-    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
 
     payload = build_canonical_contact_payload(
         {
@@ -113,48 +113,48 @@ def test_build_canonical_contact_payload_keeps_non_german_international_display(
 def test_build_canonical_contact_payload_ignores_glued_long_phone_numbers(monkeypatch):
     """Unreasonably long digit strings from source text must be filtered out."""
 
-    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
 
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
             "full_name": "Alpha Bravo Extern",
-            "phone": "+49 171 4535343",
+            "phone": "+49 171 0005343",
         },
         source_message_id=9,
         source_text="""
-Telefon: +49 171 4535343
+Telefon: +49 171 0005343
 Mobil: +49159076600234915907660023
 """,
     )
 
     phones = payload["contact"]["phones"]
-    assert {"type": "business", "raw": "+49 171 4535343", "e164": "+491714535343"} in phones
+    assert {"type": "business", "raw": "+49 171 0005343", "e164": "+491710005343"} in phones
     assert all("6002349159" not in item["raw"] for item in phones)
 
 
 def test_build_canonical_contact_payload_skips_register_numbers_and_keeps_mobile(monkeypatch):
     """Register IDs like HRB must not be extracted as phone numbers."""
 
-    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
 
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
             "full_name": "Juliane Reinhardt-Mueller",
-            "phone": "+49 (341) 3320 4342",
+            "phone": "+49 (30) 1000 4342",
         },
         source_message_id=11,
         source_text="""
-T: +49 (341) 3320 4342
-M: 0173 3982023
+T: +49 (30) 1000 4342
+M: 0170 0002023
 Handelsregisternummer: HRB 134441 B
 """,
     )
 
     phones = payload["contact"]["phones"]
-    assert {"type": "business", "raw": "+49 341 33204342", "e164": "+4934133204342"} in phones
-    assert {"type": "mobile", "raw": "+49 173 3982023", "e164": "+491733982023"} in phones
+    assert {"type": "business", "raw": "+49 301 0004342", "e164": "+493010004342"} in phones
+    assert {"type": "mobile", "raw": "+49 170 0002023", "e164": "+491700002023"} in phones
     assert all("134441" not in item["raw"] for item in phones)
 
 
@@ -163,31 +163,31 @@ def test_build_canonical_contact_payload_limits_text_phone_extraction_to_contact
 ):
     """Phone extraction should avoid unrelated numbers from other signature blocks."""
 
-    monkeypatch.setenv("EWS_ACCOUNT_KEY", "bewerbung")
+    monkeypatch.setenv("EWS_ACCOUNT_KEY", "testaccount")
 
     payload = build_canonical_contact_payload(
         {
             "is_allowed": True,
             "full_name": "Jordan Beispiel",
             "email": "jordan.beispiel@anon.invalid",
-            "phone": "+49-34292-710-12",
+            "phone": "+49 30 100012",
         },
         source_message_id=12,
         source_text="""
-Mobil: +49 177 8112663
+Mobil: +49 177 0002663
 E-Mail: backup.person@anon.invalid
 
 Von: Beispiel, Jordan <jordan.beispiel@anon.invalid>
-Telefon: +49-34292-710-12
-Mobil: +49-151-15343316
+Telefon: +49 30 100012
+Mobil: +49 151 0003316
 E-Mail: jordan.beispiel@anon.invalid
 """,
     )
 
     phones = payload["contact"]["phones"]
-    assert {"type": "business", "raw": "+49 342 9271012", "e164": "+493429271012"} in phones
-    assert {"type": "mobile", "raw": "+49 151 15343316", "e164": "+4915115343316"} in phones
-    assert all("+49 177 8112663" not in item["raw"] for item in phones)
+    assert {"type": "business", "raw": "+49 301 00012", "e164": "+4930100012"} in phones
+    assert {"type": "mobile", "raw": "+49 151 0003316", "e164": "+491510003316"} in phones
+    assert all("+49 177 0002663" not in item["raw"] for item in phones)
 
 
 def test_build_canonical_contact_payload_requires_phone():

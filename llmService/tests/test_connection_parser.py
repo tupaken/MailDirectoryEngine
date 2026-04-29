@@ -9,6 +9,7 @@ from llmService.LLM.Connection import (
     parse_first_llm_json,
     parse_llm_json,
 )
+from llmService.LLM.normalization import _dedupe_contacts, _looks_like_person_name_line
 
 
 def test_parse_llm_json_accepts_clean_allowed_json():
@@ -106,18 +107,18 @@ def test_normalize_result_recovers_swapped_email_and_phone_fields():
         "is_allowed": True,
         "full_name": "",
         "company": "Acme Logistics GmbH",
-        "email": "+49 341 33204342",
+        "email": "+49 301 0004342",
         "phone": "taylor.beispiel@anon.invalid",
     }
     mail = """
 Acme Logistics GmbH
-Telefon: +49 (341) 3320 4342
+Telefon: +49 (30) 1000 4342
 E-Mail: taylor.beispiel@anon.invalid
 """
     result = _normalize_llm_result(parsed, mail)
     assert result["is_allowed"] is True
     assert result["email"] == "taylor.beispiel@anon.invalid"
-    assert result["phone"] == "+49 (341) 3320 4342"
+    assert result["phone"] == "+49 (30) 1000 4342"
     assert result["full_name"] == "Taylor Beispiel"
 
 
@@ -145,30 +146,30 @@ def test_normalize_result_infers_signature_name_not_recipient_list_name():
     parsed = {
         "is_allowed": True,
         "full_name": "",
-        "company": "Machern bei Leipzig",
+        "company": "Beispielstadt",
         "email": "taylor.beispiel@anon.invalid",
-        "phone": "+49-160-7592207",
+        "phone": "+49-160-0002207",
     }
     mail = """
 Von:
 Beispiel <taylor.beispiel@anon.invalid>
 An:
-Beispiel, Jordan <jordan.beispiel@anon.invalid>; Weber <robin.beispiel@anon.invalid>; Praktikant <praktikant@anon.invalid>
+Beispiel, Jordan <jordan.beispiel@anon.invalid>; Weber <robin.beispiel@anon.invalid>; Testrolle <testrolle@anon.invalid>
 Betreff:
 Urlaub
 Taylor Beispiel
 PLANUNGSBUERO BEISPIEL GmbH
-Polenzer Strasse 6b
-04827 Machern bei Leipzig
-Telefon: +49-34292-710-18
-Mobil: +49-160-7592207
+Teststrasse 1
+99999 Beispielstadt
+Telefon: +999-700-100-18
+Mobil: +49-160-0002207
 E-Mail:
 taylor.beispiel@anon.invalid
 """
     result = _normalize_llm_result(parsed, mail)
     assert result["is_allowed"] is True
     assert result["full_name"] == "Taylor Beispiel"
-    assert result["phone"] == "+49-160-7592207"
+    assert result["phone"] == "+49-160-0002207"
     assert result["email"] == "taylor.beispiel@anon.invalid"
 
 
@@ -183,7 +184,7 @@ def test_normalize_result_infers_name_from_signature_near_phone():
         "website": "",
     }
     mail = """
-Von: Bewerbungen <jobs@anon.invalid>
+Von: Testteam <jobs@anon.invalid>
 Gesendet: Mittwoch, 25. März 2026 16:20
 An: Team <team@anon.invalid>
 Betreff: test_signatur
@@ -224,6 +225,26 @@ Telefon: +999-700-100-10
 """
     result = _normalize_llm_result(parsed, mail)
     assert result == {"is_allowed": False}
+
+
+def test_normalize_result_drops_mismatched_single_token_personal_email():
+    parsed = {
+        "is_allowed": True,
+        "full_name": "Taylor Beispiel",
+        "email": "alpha@vendor.invalid",
+        "phone": "+999 700 1000",
+    }
+    mail = """
+Taylor Beispiel
+Telefon: +999 700 1000
+E-Mail: alpha@vendor.invalid
+"""
+
+    result = _normalize_llm_result(parsed, mail)
+
+    assert result["is_allowed"] is True
+    assert result["full_name"] == "Taylor Beispiel"
+    assert result["email"] == ""
 
 
 def test_normalize_result_infers_name_from_contact_label_when_phone_present():
@@ -379,12 +400,12 @@ def test_normalize_result_does_not_treat_best_gruesse_as_person_name():
         "full_name": "",
         "company": "ANONYM Software AG",
         "email": "contact@anon.invalid",
-        "phone": "+49 160 8894525",
+        "phone": "+49 160 0004525",
     }
     mail = """
 Beste Gruesse
 ANONYM Software AG
-Telefon: +49 160 8894525
+Telefon: +49 160 0004525
 E-Mail: contact@anon.invalid
 """
     result = _normalize_llm_result(parsed, mail)
@@ -416,13 +437,13 @@ def test_normalize_result_prefers_email_matched_name_over_unrelated_signature_na
         "full_name": "",
         "company": "ANONYM Strom GmbH",
         "email": "alpha.bravo.extern@anon.invalid",
-        "phone": "+49 171 4535343",
+        "phone": "+49 171 0005343",
     }
     mail = """
 Beste Gruesse
 Sky Demo
 ANONYM Strom GmbH
-Telefon: +49 171 4535343
+Telefon: +49 171 0005343
 Mobil: +49 1590 7660023
 E-Mail: alpha.bravo.extern@anon.invalid
 """
@@ -437,11 +458,11 @@ def test_normalize_result_ignores_fachbereich_as_person_name_and_uses_email_name
         "full_name": "",
         "company": "Verwaltung Beispielstadt",
         "email": "delta.echo@anon.invalid",
-        "phone": "034298 70128",
+        "phone": "03000 70128",
     }
     mail = """
 Fachbereich Innere
-Telefon: 034298 70128
+Telefon: 03000 70128
 4268802
 E-Mail: delta.echo@anon.invalid
 """
@@ -450,25 +471,30 @@ E-Mail: delta.echo@anon.invalid
     assert result["full_name"] == "Delta Echo"
 
 
+def test_person_name_filter_rejects_address_and_organization_lines():
+    assert _looks_like_person_name_line("Am Testweg") is False
+    assert _looks_like_person_name_line("Stadtverwaltung Beispielstadt") is False
+
+
 def test_normalize_result_ignores_hallo_name_and_infers_from_compound_email():
     parsed = {
         "is_allowed": True,
         "full_name": "Hallo Robin",
         "company": "ANONYM Planning GmbH",
-        "email": "charlienadir@pbnadir.invalid",
-        "phone": "+49 3429 27100",
+        "email": "charlienadir@nadir.invalid",
+        "phone": "+49 3000 27100",
     }
     mail = """
 Hallo Robin
 ANONYM Planning GmbH
-Telefon: +49 3429 27100
-Mobil: +49 171 4555343
-E-Mail: charlienadir@pbnadir.invalid
+Telefon: +49 3000 27100
+Mobil: +49 171 0005543
+E-Mail: charlienadir@nadir.invalid
 """
     result = _normalize_llm_result(parsed, mail)
     assert result["is_allowed"] is True
     assert result["full_name"] == "Charlie Nadir"
-    assert result["email"] == "charlienadir@pbnadir.invalid"
+    assert result["email"] == "charlienadir@nadir.invalid"
 
 
 def test_normalize_result_ignores_netzbetrieb_waerme_and_uses_person_signature_name():
@@ -477,7 +503,7 @@ def test_normalize_result_ignores_netzbetrieb_waerme_and_uses_person_signature_n
         "full_name": "",
         "company": "Netz Beispiel GmbH",
         "email": "lars.ziegler@netzbeispiel.invalid",
-        "phone": "0173 3982023",
+        "phone": "0170 0002023",
     }
     mail = """
 Freundliche Gruesse
@@ -485,7 +511,7 @@ i. A. Lars Ziegler
 Betriebsingenieur Fernwaerme
 Netzbetrieb Waerme
 Netz Beispiel GmbH
-Mobil: 0173 3982023
+Mobil: 0170 0002023
 lars.ziegler@netzbeispiel.invalid
 """
     result = _normalize_llm_result(parsed, mail)
@@ -499,7 +525,7 @@ def test_normalize_result_ignores_projektleitung_development_as_name():
         "full_name": "",
         "company": "ANONYM Bautraeger GmbH",
         "email": "juliane.reinhardt-mueller@beispielgruppe.invalid",
-        "phone": "+49 (341) 3320 4342",
+        "phone": "+49 (30) 1000 4342",
     }
     mail = """
 Hallo Herr Beispiel,
@@ -507,7 +533,7 @@ Freundliche Gruesse
 Juliane Reinhardt-Mueller
 Projektleitung Development
 ANONYM Bautraeger GmbH
-T: +49 (341) 3320 4342
+T: +49 (30) 1000 4342
 M: +49 (1520) 1882 792
 E: juliane.reinhardt-mueller@beispielgruppe.invalid
 Handelsregisternummer: HRB 134441 B
@@ -523,14 +549,14 @@ def test_normalize_result_prefers_email_name_when_llm_full_name_is_hallo():
         "full_name": "Hallo Herr Beispiel",
         "company": "Planungsbuero Beispiel GmbH",
         "email": "jordan.beispiel@anon.invalid",
-        "phone": "+49 177 8112663",
+        "phone": "+49 177 0002663",
     }
     mail = """
 Hallo Herr Beispiel,
 Mit freundlichen Gruessen
 Dipl.-Ing.
 ppa. Bernd Fischer
-Mobil: +49 177 8112663
+Mobil: +49 177 0002663
 E-Mail: backup.person@anon.invalid
 
 Von: Beispiel, Jordan <jordan.beispiel@anon.invalid>
@@ -538,8 +564,8 @@ Mit freundlichen Gruessen
 ppa. Jordan
 Beispiel
 PLANUNGSBUERO BEISPIEL GmbH
-Telefon: +49-34292-710-12
-Mobil: +49-151-15343316
+Telefon: +49 30 100012
+Mobil: +49 151 0003316
 E-Mail: jordan.beispiel@anon.invalid
 """
     result = _normalize_llm_result(parsed, mail)
@@ -671,6 +697,23 @@ service@anon.invalid
     assert contacts[1]["email"] == "service@anon.invalid"
 
 
+def test_extract_structured_contacts_from_mail_attaches_local_source_text():
+    mail = """
+Org Alpha Services - Morgan Beispiel; +999 170 1112233; morgan.beispiel@anon.invalid
+Org Beta Technik - Riley Beispiel; +999 351 5558800; service@anon.invalid
+"""
+
+    contacts = _extract_structured_contacts_from_mail(mail)
+
+    assert len(contacts) == 2
+    assert contacts[0]["_source_text"] == (
+        "Org Alpha Services - Morgan Beispiel; +999 170 1112233; morgan.beispiel@anon.invalid"
+    )
+    assert contacts[1]["_source_text"] == (
+        "Org Beta Technik - Riley Beispiel; +999 351 5558800; service@anon.invalid"
+    )
+
+
 def test_extract_signature_contacts_from_mail_detects_signature_contact_block():
     mail = """
 Hallo Team,
@@ -678,9 +721,9 @@ Hallo Team,
 Mit freundlichen Gruessen
 Robin Beispiel
 PLANUNGSBUERO BEISPIEL GmbH
-Polenzer Strasse 6b
-Telefon: +49-34292-710-0
-Telefax: +49-34292-710-30
+Teststrasse 1
+Telefon: +999-700-100-00
+Telefax: +999-700-100-30
 E-Mail:
 robin.beispiel@anon.invalid
 """
@@ -688,7 +731,7 @@ robin.beispiel@anon.invalid
     assert len(contacts) >= 1
     assert any(
         contact["full_name"] == "Robin Beispiel"
-        and contact["phone"] == "+49-34292-710-0"
+        and contact["phone"] == "+999-700-100-00"
         and contact["email"] == "robin.beispiel@anon.invalid"
         for contact in contacts
     )
@@ -699,14 +742,14 @@ def test_extract_signature_contacts_from_mail_ignores_recipient_distribution_nam
 Von:
 Beispiel <taylor.beispiel@anon.invalid>
 An:
-Beispiel, Jordan <jordan.beispiel@anon.invalid>; Weber <robin.beispiel@anon.invalid>; Praktikant <praktikant@anon.invalid>
+Beispiel, Jordan <jordan.beispiel@anon.invalid>; Weber <robin.beispiel@anon.invalid>; Testrolle <testrolle@anon.invalid>
 Betreff:
 Urlaub
 Taylor Beispiel
 PLANUNGSBUERO BEISPIEL GmbH
-Polenzer Strasse 6b
-Telefon: +49-34292-710-18
-Mobil: +49-160-7592207
+Teststrasse 1
+Telefon: +999-700-100-18
+Mobil: +49-160-0002207
 E-Mail:
 taylor.beispiel@anon.invalid
 """
@@ -725,7 +768,7 @@ Weber <robin.beispiel@anon.invalid>; Beispiel, Jordan <jordan.beispiel@anon.inva
 Mit freundlichen Gruessen
 Robin Beispiel
 PLANUNGSBUERO BEISPIEL GmbH
-Telefon: +49-34292-710-0
+Telefon: +999-700-100-00
 E-Mail:
 robin.beispiel@anon.invalid
 """
@@ -733,10 +776,67 @@ robin.beispiel@anon.invalid
     assert len(contacts) >= 1
     assert any(
         contact["full_name"] == "Robin Beispiel"
-        and contact["phone"] == "+49-34292-710-0"
+        and contact["phone"] == "+999-700-100-00"
         and contact["email"] == "robin.beispiel@anon.invalid"
         for contact in contacts
     )
+
+
+def test_dedupe_contacts_merges_same_name_and_phone_when_email_is_added_later():
+    contacts = _dedupe_contacts(
+        [
+            {
+                "is_allowed": True,
+                "full_name": "Taylor Beispiel",
+                "phone": "+999 700 1000",
+            },
+            {
+                "is_allowed": True,
+                "full_name": "Taylor Beispiel",
+                "email": "taylor.beispiel@anon.invalid",
+                "phone": "+999 700 1000",
+            },
+        ]
+    )
+
+    assert contacts == [
+        {
+            "is_allowed": True,
+            "full_name": "Taylor Beispiel",
+            "phone": "+999 700 1000",
+            "email": "taylor.beispiel@anon.invalid",
+        }
+    ]
+
+
+def test_dedupe_contacts_prefers_more_specific_source_text_when_merging():
+    contacts = _dedupe_contacts(
+        [
+            {
+                "is_allowed": True,
+                "full_name": "Taylor Beispiel",
+                "phone": "+999 700 1000",
+                "_source_text": "Intro\nTaylor Beispiel\nTelefon: +999 700 1000\nOther Contact\nTelefon: +999 700 2000",
+            },
+            {
+                "is_allowed": True,
+                "full_name": "Taylor Beispiel",
+                "email": "taylor.beispiel@anon.invalid",
+                "phone": "+999 700 1000",
+                "_source_text": "Taylor Beispiel\nTelefon: +999 700 1000\nE-Mail: taylor.beispiel@anon.invalid",
+            },
+        ]
+    )
+
+    assert contacts == [
+        {
+            "is_allowed": True,
+            "full_name": "Taylor Beispiel",
+            "phone": "+999 700 1000",
+            "email": "taylor.beispiel@anon.invalid",
+            "_source_text": "Taylor Beispiel\nTelefon: +999 700 1000\nE-Mail: taylor.beispiel@anon.invalid",
+        }
+    ]
 
 
 def test_parse_llm_json_keeps_keyword_words_inside_string_values():

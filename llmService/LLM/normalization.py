@@ -109,6 +109,8 @@ GENERIC_EMAIL_LOCALPART_TOKENS = {
 }
 SIGNATURE_SIGNOFF_MARKERS = (
     "mit freundlichen gruessen",
+    "mit freundlichem gruss",
+    "mit freundlichem grusse",
     "freundliche gruesse",
     "beste gruesse",
     "viele gruesse",
@@ -159,6 +161,7 @@ NON_PERSON_ORG_TOKENS = {
     "sachgebiet",
     "sekretariat",
     "verwaltung",
+    "stadtverwaltung",
     "amt",
     "behoerde",
     "stadt",
@@ -171,6 +174,18 @@ NON_PERSON_ORG_TOKENS = {
     "support",
     "office",
     "unit",
+}
+ADDRESS_PREFIX_TOKENS = {
+    "am",
+    "an",
+    "auf",
+    "bei",
+    "im",
+    "in",
+    "vom",
+    "von",
+    "zur",
+    "zum",
 }
 GREETING_NAME_PHRASES = {
     "beste gruesse",
@@ -457,6 +472,8 @@ def _looks_like_person_name_line(line: str) -> bool:
         return False
 
     folded_tokens = [_ascii_fold(token.strip(".,;:")) for token in candidate.split()]
+    if folded_tokens and folded_tokens[0] in ADDRESS_PREFIX_TOKENS:
+        return False
     if folded_tokens and folded_tokens[0] in NON_PERSON_GREETING_TOKENS:
         return False
     if len(folded_tokens) >= 2 and folded_tokens[0] == "guten" and folded_tokens[1] in {
@@ -704,6 +721,41 @@ def _email_localpart_matches_name(email: str, full_name: str) -> bool:
         return True
 
     return False
+
+
+def _email_localpart_conflicts_with_name(email: str, full_name: str) -> bool:
+    """Return True when a non-generic email local-part points to another person."""
+
+    normalized_name = _normalize_person_name_candidate(full_name)
+    if not normalized_name:
+        return False
+
+    tokens = _email_localpart_tokens(email)
+    meaningful_tokens = [
+        re.sub(r"[^a-z]", "", _ascii_fold(token))
+        for token in tokens
+        if token.casefold() not in GENERIC_EMAIL_LOCALPART_TOKENS
+    ]
+    meaningful_tokens = [token for token in meaningful_tokens if len(token) >= 3]
+    if not meaningful_tokens:
+        return False
+
+    if _email_localpart_matches_name(email, normalized_name):
+        return False
+
+    name_tokens = [
+        re.sub(r"[^a-z]", "", _ascii_fold(token))
+        for token in normalized_name.split()
+        if len(re.sub(r"[^a-z]", "", _ascii_fold(token))) >= 3
+    ]
+    if not name_tokens:
+        return False
+
+    return not any(
+        email_token in name_token or name_token in email_token
+        for email_token in meaningful_tokens
+        for name_token in name_tokens
+    )
 
 
 def _names_are_compatible(primary_name: str, secondary_name: str) -> bool:
@@ -1208,6 +1260,8 @@ def _normalize_llm_result(parsed: dict, mail: str) -> dict:
         if email_person_name:
             if not _names_are_compatible(full_name_value, email_person_name):
                 normalized["email"] = ""
+        elif _email_localpart_conflicts_with_name(email_value, full_name_value):
+            normalized["email"] = ""
         elif _email_looks_personal(email_value) and not _email_localpart_matches_name(
             email_value, full_name_value
         ):
@@ -1252,14 +1306,51 @@ def _contact_dedupe_key(contact: dict) -> tuple[str, str, str]:
 
 
 def _dedupe_contacts(contacts: list[dict]) -> list[dict]:
-    """Remove duplicate contacts while preserving first-seen order."""
+    """Remove duplicate contacts while preserving first-seen order and richer data."""
 
     deduped: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
+
+    def merge_missing(existing: dict, incoming: dict) -> None:
+        for field in ALLOWED_FIELDS:
+            if not _clean_text(existing.get(field)) and _clean_text(incoming.get(field)):
+                existing[field] = incoming.get(field)
+        existing_source = _clean_text(existing.get("_source_text"))
+        incoming_source = _clean_text(incoming.get("_source_text"))
+        if not existing_source and incoming_source:
+            existing["_source_text"] = incoming.get("_source_text")
+        elif existing_source and incoming_source and len(incoming_source) < len(existing_source):
+            existing["_source_text"] = incoming.get("_source_text")
+
     for contact in contacts:
         key = _contact_dedupe_key(contact)
         if key in seen:
+            for existing in deduped:
+                if _contact_dedupe_key(existing) == key:
+                    merge_missing(existing, contact)
+                    break
             continue
+        phone_key, email_key, name_key = key
+        if phone_key and name_key:
+            merged = False
+            for existing in deduped:
+                existing_key = _contact_dedupe_key(existing)
+                same_phone_and_name = (
+                    existing_key[0] == phone_key
+                    and existing_key[2] == name_key
+                )
+                compatible_email = (
+                    not existing_key[1]
+                    or not email_key
+                    or existing_key[1] == email_key
+                )
+                if same_phone_and_name and compatible_email:
+                    merge_missing(existing, contact)
+                    seen.add(key)
+                    merged = True
+                    break
+            if merged:
+                continue
         seen.add(key)
         deduped.append(contact)
     return deduped
@@ -1286,6 +1377,7 @@ def _extract_structured_contacts_from_mail(mail: str) -> list[dict]:
         phone = _clean_text(match.group("phone"))
         email_match = EMAIL_RE.search(line)
         email = _clean_text(email_match.group(0)) if email_match else ""
+        source_lines = [line]
         if not email:
             # Some mail cleaners split "company/name/phone;" and email onto the next line.
             end = min(len(lines), idx + 4)
@@ -1298,6 +1390,7 @@ def _extract_structured_contacts_from_mail(mail: str) -> list[dict]:
                 next_email_match = EMAIL_RE.search(next_line)
                 if next_email_match:
                     email = _clean_text(next_email_match.group(0))
+                    source_lines.append(next_line)
                     break
 
         parsed = {
@@ -1311,6 +1404,7 @@ def _extract_structured_contacts_from_mail(mail: str) -> list[dict]:
         }
         normalized = _normalize_llm_result(parsed, str(mail))
         if normalized.get("is_allowed") is True:
+            normalized["_source_text"] = "\n".join(source_lines).strip()
             extracted.append(normalized)
 
     return _dedupe_contacts(extracted)
