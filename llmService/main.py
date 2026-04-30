@@ -122,6 +122,8 @@ def save_sent(db: DB_adapter, sent_messages: list) -> None:
                 db.mark_operated("Sent", message.id)
                 continue
 
+            #context = #TODO context extraction
+
             send_storage_payload(message.path, nmb)
             db.mark_operated("Sent", message.id)
         except FileNotFoundError:

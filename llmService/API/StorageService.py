@@ -25,7 +25,7 @@ class StorageServiceError(RuntimeError):
 
 
 def send_storage_payload(source_path: str, number: str) -> dict:
-    """Send one sent-mail file path and project number to StorageService."""
+    """Send one sent-mail file path, project number and targetFileName to StorageService."""
 
     endpoint = os.getenv("STORAGE_SERVICE_ENDPOINT")
     if not endpoint:
@@ -36,6 +36,7 @@ def send_storage_payload(source_path: str, number: str) -> dict:
     payload = {
         "sourcePath": source_path,
         "number": number,
+        "targetFileName":"test_name",
     }
 
     req = request.Request(
