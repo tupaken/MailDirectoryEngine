@@ -35,7 +35,7 @@ internal static class StorageEndpoints
     /// <param name="storageEngine">The storage engine used to resolve and copy the file.</param>
     /// <returns>
     /// An HTTP 200 response when the file was stored successfully; otherwise a structured
-    /// 404/503/500 response describing the failure reason.
+    /// 400/404/503/500 response describing the failure reason.
     /// </returns>
     internal static Results<
         Ok<ServiceMessageResponse>,

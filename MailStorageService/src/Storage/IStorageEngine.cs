@@ -8,6 +8,7 @@ internal enum StoreStatus
     ShareUnavailable,
     CopyFailed,
     SourceNotFound,
+    // Returned when the caller supplies an unsafe or invalid target file name.
     InvalidTargetFileName,
 }
 
