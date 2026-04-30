@@ -3,7 +3,7 @@ namespace MailStorageService.Api.Contracts;
 /// <summary>
 /// Represents a request to store an exported mail file for a case number.
 /// </summary>
-public sealed record StoreRequest(string SourcePath, string Number);
+public sealed record StoreRequest(string SourcePath, string Number,string TargetFileName);
 
 /// <summary>
 /// Represents a simple message response from the storage service.

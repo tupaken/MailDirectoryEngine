@@ -8,6 +8,7 @@ internal enum StoreStatus
     ShareUnavailable,
     CopyFailed,
     SourceNotFound,
+    InvalidTargetFileName,
 }
 
 
@@ -21,6 +22,7 @@ internal interface IStorageEngine
     /// </summary>
     /// <param name="sourcePath">The container-visible path to the exported mail file.</param>
     /// <param name="number">The case number used to resolve the destination folder.</param>
+    /// <param name="targetFileName">Specifies the destination file name without path segments.</param>
     /// <returns>A status value describing whether storage succeeded and, if not, why it failed.</returns>
-    public StoreStatus Store(string sourcePath, string number);
+    public StoreStatus Store(string sourcePath, string number, string targetFileName);
 }

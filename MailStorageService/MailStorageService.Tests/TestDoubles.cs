@@ -44,7 +44,7 @@ internal sealed class FakeStorageEngine : IStorageEngine
         this.result = result;
     }
 
-    public StoreStatus Store(string sourcePath, string number)
+    public StoreStatus Store(string sourcePath, string number, string name)
     {
         return this.result;
     }

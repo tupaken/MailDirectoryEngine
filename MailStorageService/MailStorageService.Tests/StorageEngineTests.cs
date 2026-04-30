@@ -20,7 +20,7 @@ public class StorageEngineTests
             copyWithRsync: static (_, _) => 0,
             delay: _ => delayCalls++);
 
-        var result = engine.Store("/mail-export/message.eml", "12345");
+        var result = engine.Store("/mail-export/message.eml", "12345", "test");
 
         Assert.Equal(StoreStatus.ShareUnavailable, result);
         Assert.Equal(5, mountCheck.MountCallCount);
@@ -53,11 +53,11 @@ public class StorageEngineTests
                 },
                 delay: _ => { });
 
-            var result = engine.Store(sourcePath, "12345");
+            var result = engine.Store(sourcePath, "12345", "test");
 
             Assert.Equal(StoreStatus.Success, result);
             Assert.Equal(1, mountCheck.MountCallCount);
-            Assert.Equal(targetDirectory, Assert.Single(destinations));
+            Assert.Equal(Path.Combine(targetDirectory, "test.eml"), Assert.Single(destinations));
         }
         finally
         {
@@ -84,7 +84,7 @@ public class StorageEngineTests
                 copyWithRsync: static (_, _) => 0,
                 delay: _ => { });
 
-            var result = engine.Store(sourcePath, "12345");
+            var result = engine.Store(sourcePath, "12345", "test");
 
             Assert.Equal(StoreStatus.DestinationNotFound, result);
         }
@@ -113,7 +113,7 @@ public class StorageEngineTests
                 copyWithRsync: static (_, _) => 0,
                 delay: _ => { });
 
-            var result = engine.Store(Path.Combine(root, "missing.eml"), "12345");
+            var result = engine.Store(Path.Combine(root, "missing.eml"), "12345","test");
 
             Assert.Equal(StoreStatus.SourceNotFound, result);
         }
@@ -150,11 +150,11 @@ public class StorageEngineTests
                 },
                 delay: _ => { });
 
-            var result = engine.Store(tempSourcePath, "12345");
+            var result = engine.Store(tempSourcePath, "12345","test");
 
             Assert.Equal(StoreStatus.Success, result);
             Assert.Equal(tempSourcePath, sourcePath);
-            Assert.Equal(targetDirectory, destinationPath);
+            Assert.Equal(Path.Combine(targetDirectory, "test.eml"), destinationPath);
         }
         finally
         {
@@ -184,7 +184,7 @@ public class StorageEngineTests
                 copyWithRsync: (_, _) => exitCodes.Dequeue(),
                 delay: _ => delayCalls++);
 
-            var result = engine.Store(sourcePath, "12345");
+            var result = engine.Store(sourcePath, "12345","test");
 
             Assert.Equal(StoreStatus.Success, result);
             Assert.Empty(exitCodes);
@@ -221,10 +221,46 @@ public class StorageEngineTests
                 },
                 delay: _ => { });
 
-            var result = engine.Store(sourcePath, "12345");
+            var result = engine.Store(sourcePath, "12345","test");
 
             Assert.Equal(StoreStatus.CopyFailed, result);
             Assert.Equal(6, attempts);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that storage rejects invalid target file names that include path traversal.
+    /// </summary>
+    [Fact]
+    public void Store_ReturnsInvalidTargetFileName_WhenTargetFileNameContainsPathTraversal()
+    {
+        var root = CreateTempDirectory();
+
+        try
+        {
+            CreateMatchingDirectoryTree(root, "12345");
+            var sourcePath = CreateSourceFile(root);
+            var copyCalls = 0;
+            var engine = new StorageEngine(
+                new FakeMountCheck(true),
+                mountPath: root,
+                directory2: "Dokumente",
+                directory3: "TestDocs",
+                copyWithRsync: (_, _) =>
+                {
+                    copyCalls++;
+                    return 0;
+                },
+                delay: _ => { });
+
+            var result = engine.Store(sourcePath, "12345", "../escape");
+
+            Assert.Equal(StoreStatus.InvalidTargetFileName, result);
+            Assert.Equal(0, copyCalls);
         }
         finally
         {

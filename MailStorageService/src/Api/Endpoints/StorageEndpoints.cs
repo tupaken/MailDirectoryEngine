@@ -40,11 +40,12 @@ internal static class StorageEndpoints
     internal static Results<
         Ok<ServiceMessageResponse>,
         NotFound<ServiceMessageResponse>,
+        BadRequest<ServiceMessageResponse>,
         JsonHttpResult<ServiceMessageResponse>> Store(
         StoreRequest request,
         IStorageEngine storageEngine)
     {
-        var status = storageEngine.Store(request.SourcePath, request.Number);
+        var status = storageEngine.Store(request.SourcePath, request.Number, request.TargetFileName);
 
         return status switch
         {
@@ -53,6 +54,8 @@ internal static class StorageEndpoints
                 new ServiceMessageResponse("destination_not_found")),
             StoreStatus.SourceNotFound => TypedResults.NotFound(
                 new ServiceMessageResponse("source_not_found")),
+            StoreStatus.InvalidTargetFileName => TypedResults.BadRequest(
+                new ServiceMessageResponse("invalid_target_file_name")),
             StoreStatus.ShareUnavailable => TypedResults.Json(
                 new ServiceMessageResponse("share_unavailable"),
                 statusCode: StatusCodes.Status503ServiceUnavailable),
