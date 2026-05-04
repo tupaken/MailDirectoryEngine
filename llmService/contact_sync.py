@@ -354,6 +354,54 @@ def _build_phone_items(contact: dict, source_text: str) -> list[dict[str, str]]:
     return phone_items
 
 
+def _source_contains_phone(source_text: str, phone_items: list[dict[str, str]]) -> bool:
+    """Check whether any emitted phone appears in the local source block."""
+
+    source_digits = _phone_digits(source_text)
+    if not source_digits:
+        return False
+
+    for item in phone_items:
+        digits = _phone_digits(item.get("raw", "") or item.get("e164", ""))
+        if digits and digits in source_digits:
+            return True
+    return False
+
+
+def _source_contains_name(source_text: str, full_name: str) -> bool:
+    """Check whether the emitted name appears in the local source block."""
+
+    if not source_text or not full_name:
+        return False
+
+    compact_source = " ".join(
+        _clean_text(line) for line in str(source_text).splitlines() if _clean_text(line)
+    )
+    return _line_matches_name_variant(compact_source, full_name)
+
+
+def _build_evidence(
+    contact: dict,
+    full_name: str,
+    phone_items: list[dict[str, str]],
+    source_text: str,
+) -> dict[str, object]:
+    """Build deterministic evidence flags for ContactService promotion rules."""
+
+    source = _clean_text(source_text)
+    source_folded = source.casefold()
+    email = _clean_text(contact.get("email")).casefold()
+    company = _clean_text(contact.get("company")).casefold()
+
+    return {
+        "source_kind": "local_contact_block" if source else "unknown",
+        "email_in_source_block": bool(email and email in source_folded),
+        "phone_in_source_block": _source_contains_phone(source, phone_items),
+        "name_in_source_block": _source_contains_name(source, full_name),
+        "company_in_source_block": bool(company and company in source_folded),
+    }
+
+
 def build_canonical_contact_payload(
     contact: dict,
     source_message_id: int | None = None,
@@ -393,6 +441,7 @@ def build_canonical_contact_payload(
             "website": _clean_text(contact.get("website")),
             "notes": notes,
         },
+        "evidence": _build_evidence(contact, payload_full_name, phones, source_text or ""),
     }
 
     if source_message_id is not None:

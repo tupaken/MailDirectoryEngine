@@ -4,7 +4,7 @@ import json
 import os
 from urllib import error, request
 
-DEFAULT_CONTACT_SERVICE_ENDPOINT = "http://localhost:5000/api/contacts/canonical"
+DEFAULT_CONTACT_SERVICE_ENDPOINT = "http://localhost:5000/api/contacts/observations"
 
 
 def _clean_text(value: object) -> str:

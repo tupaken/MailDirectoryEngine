@@ -6,7 +6,7 @@ Python worker for inbox post-processing:
 - sends text to a configurable local LLM backend (`ollama` or `llama.cpp`)
 - maps each valid result to one canonical JSON schema
 - enriches phone list from mail text labels (`Telefon`, `Telefax`, `Mobil`, etc.)
-- sends contacts to `ContactService` (`POST /api/contacts/canonical`)
+- sends contact candidates to `ContactService` (`POST /api/contacts/observations`)
 - marks inbox rows as `operated = true` only when:
   - contact sync to `ContactService` succeeded, or
   - the LLM explicitly returned `is_allowed = false` (irrelevant mail), or
@@ -33,7 +33,8 @@ Python worker for inbox post-processing:
   - `unknown` -> row stays unmarked until the same result signature was seen three times; the third matching retry marks the row operated.
   - sync error -> row stays unmarked and is retried.
 - Inbox retry tracking is persisted in `e_mails_inbox.same_result_count` and `e_mails_inbox.last_result_signature` (migration `V6__inbox_same_count.sql`).
-- Every synced contact is mapped to the shared canonical schema (`schema_version = "1.0"`) and posted to `ContactService`.
+- Every synced contact candidate is mapped to the shared canonical schema (`schema_version = "1.0"`) and posted to `ContactService`.
+- ContactService keeps candidate decisions in `contact_observations` and write history in `contact_change_log`.
 
 ## Sent Mail Processing
 
@@ -91,7 +92,7 @@ Optional LLM variables:
 - `LLM_TIMEOUT_SECONDS` (default `120`)
 
 Contact sync variables:
-- `CONTACT_SERVICE_ENDPOINT` (default `http://localhost:5000/api/contacts/canonical`)
+- `CONTACT_SERVICE_ENDPOINT` (default `http://localhost:5000/api/contacts/observations`)
 - `CONTACT_SERVICE_TIMEOUT_SECONDS` (default `30`)
 - `CONTACT_SERVICE_API_KEY` (optional, forwarded as `X-Api-Key`)
 - `EWS_ACCOUNT_KEY` (default `bewerbung`, forwarded in canonical payload as `account_key`)

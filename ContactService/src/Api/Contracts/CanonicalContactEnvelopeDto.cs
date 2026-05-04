@@ -9,9 +9,11 @@ namespace ContactService.Api.Contracts;
 /// <param name="Contact">Canonical contact body to map and persist.</param>
 /// <param name="AccountKey">Optional tenant or mailbox key associated with the source message.</param>
 /// <param name="SourceMessageId">Optional upstream message identifier used for traceability.</param>
+/// <param name="Evidence">Optional deterministic evidence flags used for safe promotion decisions.</param>
 internal sealed record CanonicalContactEnvelopeDto(
     [property: JsonPropertyName("schema_version")] string SchemaVersion,
     [property: JsonPropertyName("contact")] CanonicalContactDto Contact,
     [property: JsonPropertyName("account_key")] string? AccountKey,
-    [property: JsonPropertyName("source_message_id")] string? SourceMessageId
+    [property: JsonPropertyName("source_message_id")] string? SourceMessageId,
+    [property: JsonPropertyName("evidence")] CanonicalContactEvidenceDto? Evidence = null
 );

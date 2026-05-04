@@ -215,10 +215,20 @@ public class ExchangeContactEngineTests
             return Task.FromResult(Pages.Dequeue());
         }
 
-        public Task AddContactAsync(ContactDto dto, CancellationToken ct, string? sourceMessageId = null)
+        public Task AddContactAsync(ContactDto dto, CancellationToken ct, string? sourceMessageId = null, long? observationId = null)
         {
             AddedContact = dto;
             return Task.CompletedTask;
+        }
+
+        public Task<ContactWriteResult> UpsertContactAsync(
+            ContactDto dto,
+            CancellationToken ct,
+            string? sourceMessageId = null,
+            long? observationId = null)
+        {
+            AddedContact = dto;
+            return Task.FromResult(new ContactWriteResult("created", "ews-1"));
         }
 
         public void Dispose()

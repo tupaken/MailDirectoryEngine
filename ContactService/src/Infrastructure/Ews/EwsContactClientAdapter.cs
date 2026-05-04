@@ -202,7 +202,17 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
     public async System.Threading.Tasks.Task AddContactAsync(
         ContactDto dto,
         CancellationToken ct,
-        string? sourceMessageId = null)
+        string? sourceMessageId = null,
+        long? observationId = null)
+    {
+        await UpsertContactAsync(dto, ct, sourceMessageId, observationId).ConfigureAwait(false);
+    }
+
+    public async System.Threading.Tasks.Task<ContactWriteResult> UpsertContactAsync(
+        ContactDto dto,
+        CancellationToken ct,
+        string? sourceMessageId = null,
+        long? observationId = null)
     {
         if (dto is null)
             throw new ArgumentNullException(nameof(dto));
@@ -210,17 +220,63 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
         string? ex = await _contactStore.ExistsAsync(dto, ct);
 
         if (ex!=null)
-        {       
-                //TODO: contacts update or merge leer fields 
-                Console.WriteLine("\ncontact exists\n"+ex+"\n");
-                return;
+        {
+            var changes = await UpdateExistingContactFieldsAsync(ex, dto, ct).ConfigureAwait(false);
+            if (changes.Count > 0)
+            {
+                await _contactStore.UpdateFromPromotedObservationAsync(dto, ex, sourceMessageId, ct).ConfigureAwait(false);
+
+                var contactId = await _contactStore.FindContactIdByEwsIdAsync(ex, ct).ConfigureAwait(false);
+                foreach (var change in changes)
+                {
+                    await _contactStore.InsertChangeLogAsync(
+                        contactId,
+                        ex,
+                        observationId,
+                        "updated",
+                        change.FieldName,
+                        change.OldValue,
+                        change.NewValue,
+                        sourceMessageId,
+                        "promoted_observation_changed_field",
+                        ct).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                var contactId = await _contactStore.FindContactIdByEwsIdAsync(ex, ct).ConfigureAwait(false);
+                await _contactStore.InsertChangeLogAsync(
+                    contactId,
+                    ex,
+                    observationId,
+                    "unchanged",
+                    null,
+                    null,
+                    dto.DisplayName,
+                    sourceMessageId,
+                    "promoted_observation_no_field_change",
+                    ct).ConfigureAwait(false);
+            }
+
+            return new ContactWriteResult(changes.Count > 0 ? "updated" : "unchanged", ex, changes);
         }
 
         var ewsItemId = await _saveContactAsync(dto, ct).ConfigureAwait(false);
 
         try
         {
-            await _contactStore.InsertAsync(dto, ewsItemId, sourceMessageId, ct).ConfigureAwait(false);
+            var contactId = await _contactStore.InsertAsync(dto, ewsItemId, sourceMessageId, ct).ConfigureAwait(false);
+            await _contactStore.InsertChangeLogAsync(
+                contactId,
+                ewsItemId,
+                observationId,
+                "created",
+                null,
+                null,
+                dto.DisplayName,
+                sourceMessageId,
+                "promoted_observation_created_contact",
+                ct).ConfigureAwait(false);
         }
         catch (Exception ex2)
         {
@@ -237,6 +293,8 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
 
             throw;
         }
+
+        return new ContactWriteResult("created", ewsItemId);
     }
 
     private async System.Threading.Tasks.Task<string> SaveContactAsync(ContactDto dto, CancellationToken ct)
@@ -261,6 +319,50 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
             var savedContact = Contact.Bind(_service, new ItemId(ewsItemId));
             savedContact.Delete(DeleteMode.HardDelete);
         });
+    }
+
+    private async System.Threading.Tasks.Task<IReadOnlyList<ContactFieldChange>> UpdateExistingContactFieldsAsync(
+        string ewsItemId,
+        ContactDto dto,
+        CancellationToken ct)
+    {
+        return await System.Threading.Tasks.Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var contact = Contact.Bind(_service, new ItemId(ewsItemId), new PropertySet(
+                BasePropertySet.FirstClassProperties,
+                ContactSchema.EmailAddresses,
+                ContactSchema.PhoneNumbers,
+                ContactSchema.BusinessHomePage));
+
+            var changes = new List<ContactFieldChange>();
+            AddIfChanged(changes, "given_name", contact.GivenName, dto.GivenName, value => contact.GivenName = value, overwrite: false);
+            AddIfChanged(changes, "surname", contact.Surname, dto.Surname, value => contact.Surname = value, overwrite: false);
+            AddIfChanged(changes, "company_name", contact.CompanyName, dto.Company, value => contact.CompanyName = value, overwrite: false);
+            AddIfChanged(changes, "website", contact.BusinessHomePage, dto.WebPage, value => contact.BusinessHomePage = value, overwrite: false);
+            AddEmailIfMissing(changes, contact, EmailAddressKey.EmailAddress1, dto.Email, dto.DisplayName);
+            AddPhoneIfChanged(changes, contact, PhoneNumberKey.BusinessPhone, dto.BusinessPhone);
+            AddPhoneIfChanged(changes, contact, PhoneNumberKey.HomePhone, dto.HomePhone);
+            AddPhoneIfChanged(changes, contact, PhoneNumberKey.MobilePhone, dto.MobilePhone);
+            AddPhoneIfChanged(changes, contact, PhoneNumberKey.BusinessFax, dto.BusinessFax);
+
+            if (dto.PhoneNumbers is not null)
+            {
+                foreach (var kv in dto.PhoneNumbers)
+                {
+                    if (!Enum.TryParse<PhoneNumberKey>(kv.Key, ignoreCase: true, out var key))
+                        continue;
+
+                    AddPhoneIfChanged(changes, contact, key, kv.Value);
+                }
+            }
+
+            if (changes.Count > 0)
+                contact.Update(ConflictResolutionMode.AutoResolve);
+
+            return changes;
+        }, ct).ConfigureAwait(false);
     }
 
     private static void MapToEwsContact(Contact contact, ContactDto dto)
@@ -321,6 +423,72 @@ internal sealed class EwsContactClientAdapter : IEwsContactClient
     {
         if (!string.IsNullOrWhiteSpace(value))
             contact.PhoneNumbers[key] = value;
+    }
+
+    private static void AddPhoneIfChanged(
+        ICollection<ContactFieldChange> changes,
+        Contact contact,
+        PhoneNumberKey key,
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        var oldValue = contact.PhoneNumbers.Contains(key) ? contact.PhoneNumbers[key] : null;
+        if (PhoneDigits(oldValue) == PhoneDigits(value))
+            return;
+
+        contact.PhoneNumbers[key] = value;
+        changes.Add(new ContactFieldChange(key.ToString(), oldValue, value));
+    }
+
+    private static void AddEmailIfMissing(
+        ICollection<ContactFieldChange> changes,
+        Contact contact,
+        EmailAddressKey key,
+        string? value,
+        string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        if (contact.EmailAddresses.Contains(key) &&
+            !string.IsNullOrWhiteSpace(contact.EmailAddresses[key]?.Address))
+        {
+            return;
+        }
+
+        contact.EmailAddresses[key] = new EmailAddress(displayName, value);
+        changes.Add(new ContactFieldChange(key.ToString(), null, value));
+    }
+
+    private static void AddIfChanged(
+        ICollection<ContactFieldChange> changes,
+        string fieldName,
+        string? oldValue,
+        string? newValue,
+        Action<string> setValue,
+        bool overwrite)
+    {
+        if (string.IsNullOrWhiteSpace(newValue))
+            return;
+
+        if (!string.IsNullOrWhiteSpace(oldValue) && !overwrite)
+            return;
+
+        if (string.Equals(oldValue?.Trim(), newValue.Trim(), StringComparison.Ordinal))
+            return;
+
+        setValue(newValue);
+        changes.Add(new ContactFieldChange(fieldName, oldValue, newValue));
+    }
+
+    private static string PhoneDigits(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return string.Concat(value.Where(char.IsDigit));
     }
 
     private static void MapAddresses(Contact contact, ContactDto dto)

@@ -60,7 +60,8 @@ internal sealed class ExchangeContactEngine
     /// <param name="dto">Contact data to create.</param>
     /// <param name="ct">Cancellation token for the operation.</param>
     /// <param name="sourceMessageId">Optional source message id used for DB persistence metadata.</param>
-    public async Task AddContactAsync(ContactDto dto, CancellationToken ct, string? sourceMessageId = null)
+    /// <param name="observationId">Optional quarantined observation id used for change-log traceability.</param>
+    public async Task AddContactAsync(ContactDto dto, CancellationToken ct, string? sourceMessageId = null, long? observationId = null)
     {
         if (dto is null)
             throw new ArgumentNullException(nameof(dto));
@@ -68,7 +69,22 @@ internal sealed class ExchangeContactEngine
         var config = _configProvider.GetConfig(_accountKey);
         using var client = _factory.Create(config);
 
-        await client.AddContactAsync(dto, ct, sourceMessageId).ConfigureAwait(false);
+        await client.AddContactAsync(dto, ct, sourceMessageId, observationId).ConfigureAwait(false);
+    }
+
+    public async Task<ContactWriteResult> UpsertContactAsync(
+        ContactDto dto,
+        CancellationToken ct,
+        string? sourceMessageId = null,
+        long? observationId = null)
+    {
+        if (dto is null)
+            throw new ArgumentNullException(nameof(dto));
+
+        var config = _configProvider.GetConfig(_accountKey);
+        using var client = _factory.Create(config);
+
+        return await client.UpsertContactAsync(dto, ct, sourceMessageId, observationId).ConfigureAwait(false);
     }
 
 }

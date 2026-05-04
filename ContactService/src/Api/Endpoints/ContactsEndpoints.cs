@@ -36,6 +36,7 @@ internal static class ContactsEndpoints
 
         app.MapPost("/api/contacts/canonical", async Task<IResult> (
             CanonicalContactEnvelopeDto payload,
+            IContactStore contactStore,
             IEwsContactClientFactory factory,
             IEwsConfigProvider configProvider,
             CancellationToken ct) =>
@@ -45,17 +46,28 @@ internal static class ContactsEndpoints
                 return Results.BadRequest(new { error = validationError });
 
             var resolvedAccountKey = ResolveAccountKey(payload.AccountKey);
-            var dto = CanonicalContactMapper.ToContactDto(payload);
-            var engine = new ExchangeContactEngine(factory, configProvider, resolvedAccountKey);
+            var engine = new ContactObservationEngine(contactStore, factory, configProvider, resolvedAccountKey);
+            var result = await engine.IngestAsync(payload, ct).ConfigureAwait(false);
 
-            await engine.AddContactAsync(dto, ct, payload.SourceMessageId).ConfigureAwait(false);
+            return Results.Ok(result);
+        });
 
-            return Results.Ok(new ContactSyncResultDto(
-                Status: "created",
-                AccountKey: resolvedAccountKey,
-                DisplayName: dto.DisplayName,
-                Email: dto.Email,
-                Phone: dto.BusinessPhone ?? dto.MobilePhone ?? dto.HomePhone));
+        app.MapPost("/api/contacts/observations", async Task<IResult> (
+            CanonicalContactEnvelopeDto payload,
+            IContactStore contactStore,
+            IEwsContactClientFactory factory,
+            IEwsConfigProvider configProvider,
+            CancellationToken ct) =>
+        {
+            var validationError = CanonicalContactValidator.Validate(payload);
+            if (validationError is not null)
+                return Results.BadRequest(new { error = validationError });
+
+            var resolvedAccountKey = ResolveAccountKey(payload.AccountKey);
+            var engine = new ContactObservationEngine(contactStore, factory, configProvider, resolvedAccountKey);
+            var result = await engine.IngestAsync(payload, ct).ConfigureAwait(false);
+
+            return Results.Ok(result);
         });
 
         return app;
