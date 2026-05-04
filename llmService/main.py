@@ -1,5 +1,6 @@
 """Application entry point for the Python inbox post-processing worker."""
 
+
 from .API.StorageService import (
     STORAGE_MESSAGE_DESTINATION_NOT_FOUND,
     STORAGE_MESSAGE_SOURCE_NOT_FOUND,
@@ -7,11 +8,11 @@ from .API.StorageService import (
     send_storage_payload,
 )
 from .DB.DBadapter import DB_adapter
-from .HTMLClean.htmlCleaner import html_to_text, subject_from_send
+from .HTMLClean.htmlCleaner import html_to_text, subject_from_send, content_from_send
 from .LLM.Connection import DISPOSITION_IRRELEVANT, llm_connection_with_disposition
 from .contact_sync import build_canonical_contact_payload, send_canonical_contact_payload
-from .LLM.sent_analyze import prj_number_extraction
-
+from .LLM.sent_analyze import prj_number_extraction,sent_filename_extraction
+from .LLM.mail_preprocessing import _split_mail_context_and_signature_segments, _strip_mail_headers_everywhere
 
 def _normalize_contacts(value: object) -> list[dict]:
     """Normalize decision payload contacts to a list of dictionaries."""
@@ -122,9 +123,14 @@ def save_sent(db: DB_adapter, sent_messages: list) -> None:
                 db.mark_operated("Sent", message.id)
                 continue
 
-            #context = #TODO context extraction
+            content = content_from_send(message.path)
+            cleaned = _strip_mail_headers_everywhere(content)
+            context, _, _ = _split_mail_context_and_signature_segments(cleaned)
 
-            send_storage_payload(message.path, nmb)
+            target_name=sent_filename_extraction(context)
+            
+            
+            send_storage_payload(message.path, nmb,target_name)
             db.mark_operated("Sent", message.id)
         except FileNotFoundError:
             db.mark_operated("Sent", message.id)

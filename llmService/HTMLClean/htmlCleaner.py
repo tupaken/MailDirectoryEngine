@@ -82,12 +82,36 @@ def subject_from_send(email: str) -> str | None:
 
     return msg.get("Subject")
 
-def content_from_send(email: str)-> str | None:
+def content_from_send(email: str)-> str :
     """Read the Content from a raw `.eml` file on disk."""
 
     msg=_get_msg(email)
+    
+    html_body = None
+    plain_body = None
 
-    return msg.get_content()
+    for part in msg.walk():
+        
+        if part.is_multipart():
+            continue
+
+        if part.get_content_disposition() == "attachment":
+            continue
+
+        content_type = part.get_content_type()
+
+        if content_type == "text/html" and html_body is None:
+            html_body = part.get_content()
+        elif content_type == "text/plain" and plain_body is None:
+            plain_body = part.get_content()
+        
+    if html_body:
+        return html_to_text(html_body)
+    
+    if plain_body:
+        return plain_body
+
+    return ""
 
 
 def _get_msg(email:str)->EmailMessage:
