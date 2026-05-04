@@ -25,13 +25,20 @@ def test_send_storage_payload_returns_parsed_json(monkeypatch):
     monkeypatch.setenv("STORAGE_SERVICE_ENDPOINT", "http://localhost:5001/store")
     monkeypatch.setenv("STORAGE_SERVICE_TIMEOUT_SECONDS", "12")
 
-    response = storage_module.send_storage_payload("/mail-export/12.eml", "12-345")
+    response = storage_module.send_storage_payload(
+        "/mail-export/12.eml",
+        "12-345",
+        "Rueckfrage zur Terminabstimmung",
+    )
 
     assert response == {"message": "200"}
     request_obj = urlopen_mock.call_args[0][0]
     assert request_obj.full_url == "http://localhost:5001/store"
     assert request_obj.get_method() == "POST"
-    assert request_obj.data == b'{"sourcePath": "/mail-export/12.eml", "number": "12-345"}'
+    assert request_obj.data == (
+        b'{"sourcePath": "/mail-export/12.eml", "number": "12-345", '
+        b'"targetFileName": "Rueckfrage zur Terminabstimmung"}'
+    )
     assert urlopen_mock.call_args.kwargs["timeout"] == 12
 
 
@@ -41,7 +48,7 @@ def test_send_storage_payload_requires_endpoint(monkeypatch):
     monkeypatch.delenv("STORAGE_SERVICE_ENDPOINT", raising=False)
 
     with pytest.raises(RuntimeError, match="STORAGE_SERVICE_ENDPOINT is empty"):
-        storage_module.send_storage_payload("/mail-export/12.eml", "12-345")
+        storage_module.send_storage_payload("/mail-export/12.eml", "12-345", "Name")
 
 
 def test_send_storage_payload_wraps_http_error_with_status_and_message(monkeypatch):
@@ -64,7 +71,7 @@ def test_send_storage_payload_wraps_http_error_with_status_and_message(monkeypat
     monkeypatch.setenv("STORAGE_SERVICE_ENDPOINT", "http://localhost:5001/store")
 
     with pytest.raises(StorageServiceError, match="HTTP 404") as exc_info:
-        storage_module.send_storage_payload("/mail-export/13.eml", "13-456")
+        storage_module.send_storage_payload("/mail-export/13.eml", "13-456", "Name")
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.response_message == STORAGE_MESSAGE_DESTINATION_NOT_FOUND

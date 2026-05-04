@@ -115,7 +115,8 @@ def content_from_send(email: str)-> str :
 
 
 def _get_msg(email:str)->EmailMessage:
-     
+    """Parse a raw `.eml` file into an EmailMessage."""
+
     with open(email, "rb") as f:
         msg = BytesParser(policy=policy.default).parse(f)
     return msg

@@ -14,7 +14,7 @@ Python worker for inbox post-processing:
 - retries unclear decisions while tracking repeated result signatures in the inbox table
 - reads unprocessed sent rows from PostgreSQL (`e_mails_send.operated = false`)
 - loads the exported `.eml` file, extracts the `Subject`, and parses a leading project number
-- forwards matching sent files to `StorageService` with `sourcePath` + `number`
+- forwards matching sent files to `StorageService` with `sourcePath`, `number`, and `targetFileName`
 - marks sent rows as `operated = true` when:
   - `StorageService` accepted the payload, or
   - the mail has no `Subject`, or
@@ -40,7 +40,11 @@ Python worker for inbox post-processing:
 - `save_sent(...)` processes unoperated `e_mails_send` rows before inbox work in each loop.
 - `subject_from_send(path)` reads the `Subject` header from the exported `.eml` file.
 - `prj_number_extraction(subject)` matches a leading project number in `NN-NNN` or `NN NNN` form and normalizes spaces to `-`.
-- `send_storage_payload(path, number)` posts the file path and project number to `StorageService`.
+- `content_from_send(path)` extracts the mail body from the exported `.eml`, preferring HTML body content and ignoring attachments.
+- `_strip_mail_headers_everywhere(...)` removes forwarded/reply headers before the sent context is analyzed.
+- `_split_mail_context_and_signature_segments(...)` keeps the sent body context separate from signature text.
+- `sent_filename_extraction(context)` asks the LLM for a short German storage name and expects JSON in the form `{"target_file_name": "..."}`.
+- `send_storage_payload(path, number, target_file_name)` posts the file path, project number, and generated target file name to `StorageService`.
 - Missing `Subject` headers and subjects without a project number are treated as final non-actionable results and are marked operated without retry.
 - Missing local exported `.eml` files are also treated as final and marked operated, because the source path is no longer available to process.
 - `StorageService` responses with `404 destination_not_found` are also treated as final and marked operated, because no matching destination folder exists for that project number anymore.

@@ -33,6 +33,7 @@ def sent_filename_extraction(context:str)->str:
     return result
 
 def _parse_target_file_name_response(raw_response:str)->str:
+    """Extract the target file name from the LLM JSON response."""
 
     if not raw_response:
         return "unknown"
@@ -61,6 +62,8 @@ def _parse_target_file_name_response(raw_response:str)->str:
 
 
 def _shorten_target_file_name(target_file_name: str) -> str:
+    """Ask the LLM to shorten an overlong target file name."""
+
     prompt = _PROMPT_SHORTEN_SENT_FILENAME.format(
         TARGET_FILE_NAME=target_file_name.strip()
     )

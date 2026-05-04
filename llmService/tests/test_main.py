@@ -308,11 +308,19 @@ def test_main_processes_sent_messages_via_storage_and_marks_operated(monkeypatch
     db_adapter_cls = Mock(return_value=fake_db)
     subject_mock = Mock(return_value="12 345 Angebot")
     project_mock = Mock(return_value="12-345")
+    content_mock = Mock(return_value="Raw HTML content")
+    strip_headers_mock = Mock(return_value="Cleaned sent content")
+    split_mock = Mock(return_value=("Clean context", "", ""))
+    filename_mock = Mock(return_value="Rueckfrage zur Terminabstimmung")
     storage_mock = Mock(return_value={"message": "200"})
 
     monkeypatch.setattr(main_module, "DB_adapter", db_adapter_cls)
     monkeypatch.setattr(main_module, "subject_from_send", subject_mock)
     monkeypatch.setattr(main_module, "prj_number_extraction", project_mock)
+    monkeypatch.setattr(main_module, "content_from_send", content_mock)
+    monkeypatch.setattr(main_module, "_strip_mail_headers_everywhere", strip_headers_mock)
+    monkeypatch.setattr(main_module, "_split_mail_context_and_signature_segments", split_mock)
+    monkeypatch.setattr(main_module, "sent_filename_extraction", filename_mock)
     monkeypatch.setattr(main_module, "send_storage_payload", storage_mock)
 
     with pytest.raises(KeyboardInterrupt):
@@ -320,7 +328,15 @@ def test_main_processes_sent_messages_via_storage_and_marks_operated(monkeypatch
 
     subject_mock.assert_called_once_with("C:/mail-export/11.eml")
     project_mock.assert_called_once_with("12 345 Angebot")
-    storage_mock.assert_called_once_with("C:/mail-export/11.eml", "12-345")
+    content_mock.assert_called_once_with("C:/mail-export/11.eml")
+    strip_headers_mock.assert_called_once_with("Raw HTML content")
+    split_mock.assert_called_once_with("Cleaned sent content")
+    filename_mock.assert_called_once_with("Clean context")
+    storage_mock.assert_called_once_with(
+        "C:/mail-export/11.eml",
+        "12-345",
+        "Rueckfrage zur Terminabstimmung",
+    )
     fake_db.mark_operated.assert_called_once_with("Sent", 11)
 
 
@@ -370,6 +386,10 @@ def test_save_sent_marks_operated_when_storage_destination_is_missing(monkeypatc
     fake_db = Mock()
     subject_mock = Mock(return_value="12 345 Angebot")
     project_mock = Mock(return_value="12-345")
+    content_mock = Mock(return_value="Raw HTML content")
+    strip_headers_mock = Mock(return_value="Cleaned sent content")
+    split_mock = Mock(return_value=("Clean context", "", ""))
+    filename_mock = Mock(return_value="Rueckfrage zur Terminabstimmung")
     storage_mock = Mock(
         side_effect=StorageServiceError(
             "http://localhost:5001/store",
@@ -381,12 +401,20 @@ def test_save_sent_marks_operated_when_storage_destination_is_missing(monkeypatc
 
     monkeypatch.setattr(main_module, "subject_from_send", subject_mock)
     monkeypatch.setattr(main_module, "prj_number_extraction", project_mock)
+    monkeypatch.setattr(main_module, "content_from_send", content_mock)
+    monkeypatch.setattr(main_module, "_strip_mail_headers_everywhere", strip_headers_mock)
+    monkeypatch.setattr(main_module, "_split_mail_context_and_signature_segments", split_mock)
+    monkeypatch.setattr(main_module, "sent_filename_extraction", filename_mock)
     monkeypatch.setattr(main_module, "send_storage_payload", storage_mock)
     monkeypatch.setattr(builtins, "print", print_mock)
 
     main_module.save_sent(fake_db, [Message(id=13, path="C:/mail-export/13.eml")])
 
-    storage_mock.assert_called_once_with("C:/mail-export/13.eml", "12-345")
+    storage_mock.assert_called_once_with(
+        "C:/mail-export/13.eml",
+        "12-345",
+        "Rueckfrage zur Terminabstimmung",
+    )
     fake_db.mark_operated.assert_called_once_with("Sent", 13)
     assert call("Sent message 13 marked operated: destination not found") in print_mock.mock_calls
 
@@ -423,6 +451,10 @@ def test_save_sent_leaves_retryable_storage_error_unoperated(monkeypatch):
     fake_db = Mock()
     subject_mock = Mock(return_value="12 345 Angebot")
     project_mock = Mock(return_value="12-345")
+    content_mock = Mock(return_value="Raw HTML content")
+    strip_headers_mock = Mock(return_value="Cleaned sent content")
+    split_mock = Mock(return_value=("Clean context", "", ""))
+    filename_mock = Mock(return_value="Rueckfrage zur Terminabstimmung")
     storage_mock = Mock(
         side_effect=StorageServiceError(
             "http://localhost:5001/store",
@@ -434,12 +466,20 @@ def test_save_sent_leaves_retryable_storage_error_unoperated(monkeypatch):
 
     monkeypatch.setattr(main_module, "subject_from_send", subject_mock)
     monkeypatch.setattr(main_module, "prj_number_extraction", project_mock)
+    monkeypatch.setattr(main_module, "content_from_send", content_mock)
+    monkeypatch.setattr(main_module, "_strip_mail_headers_everywhere", strip_headers_mock)
+    monkeypatch.setattr(main_module, "_split_mail_context_and_signature_segments", split_mock)
+    monkeypatch.setattr(main_module, "sent_filename_extraction", filename_mock)
     monkeypatch.setattr(main_module, "send_storage_payload", storage_mock)
     monkeypatch.setattr(builtins, "print", print_mock)
 
     main_module.save_sent(fake_db, [Message(id=15, path="C:/mail-export/15.eml")])
 
-    storage_mock.assert_called_once_with("C:/mail-export/15.eml", "12-345")
+    storage_mock.assert_called_once_with(
+        "C:/mail-export/15.eml",
+        "12-345",
+        "Rueckfrage zur Terminabstimmung",
+    )
     fake_db.mark_operated.assert_not_called()
     assert call(
         "Sent message 15 failed: StorageService returned HTTP 404 for "
