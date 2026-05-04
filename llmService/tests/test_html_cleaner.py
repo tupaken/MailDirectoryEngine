@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-from llmService.HTMLClean.htmlCleaner import html_to_text, subject_from_send
+from llmService.HTMLClean.htmlCleaner import content_from_send, html_to_text, subject_from_send
 
 
 class HtmlCleanerTests(unittest.TestCase):
@@ -53,6 +53,46 @@ class HtmlCleanerTests(unittest.TestCase):
 
         try:
             self.assertEqual("12 345 Angebot", subject_from_send(temp_path))
+        finally:
+            os.unlink(temp_path)
+
+    def test_content_from_send_prefers_html_body_and_ignores_attachments(self):
+        """Sent `.eml` parsing should use the body part, not attachment content."""
+
+        boundary = "mixed-boundary"
+        alternative_boundary = "alt-boundary"
+        with tempfile.NamedTemporaryFile("wb", delete=False) as temp_file:
+            temp_file.write(
+                (
+                    "Subject: 12 345 Angebot\r\n"
+                    "From: sender@example.invalid\r\n"
+                    "To: receiver@example.invalid\r\n"
+                    f"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n"
+                    "\r\n"
+                    f"--{boundary}\r\n"
+                    f"Content-Type: multipart/alternative; boundary=\"{alternative_boundary}\"\r\n"
+                    "\r\n"
+                    f"--{alternative_boundary}\r\n"
+                    "Content-Type: text/plain; charset=utf-8\r\n"
+                    "\r\n"
+                    "Plain fallback text\r\n"
+                    f"--{alternative_boundary}\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    "\r\n"
+                    "<html><body><p>HTML body text</p></body></html>\r\n"
+                    f"--{alternative_boundary}--\r\n"
+                    f"--{boundary}\r\n"
+                    "Content-Type: text/plain; charset=utf-8\r\n"
+                    "Content-Disposition: attachment; filename=\"note.txt\"\r\n"
+                    "\r\n"
+                    "Attachment text must not appear\r\n"
+                    f"--{boundary}--\r\n"
+                ).encode("utf-8")
+            )
+            temp_path = temp_file.name
+
+        try:
+            self.assertEqual("HTML body text", content_from_send(temp_path))
         finally:
             os.unlink(temp_path)
 

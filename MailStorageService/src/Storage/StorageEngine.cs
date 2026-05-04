@@ -44,7 +44,7 @@ internal sealed class StorageEngine : IStorageEngine
 
 
     /// <inheritdoc />
-    public StoreStatus Store(string sourcePath, string number)
+    public StoreStatus Store(string sourcePath, string number, string targetFileName)
     {
         var isMounted = this.check.IsMounted();
 
@@ -70,11 +70,16 @@ internal sealed class StorageEngine : IStorageEngine
             return StoreStatus.SourceNotFound;
         }
 
-        var destinationPath = this.FindPath(number);
+        var path = this.FindPath(number);
 
-        if (destinationPath == null)
+        if (path == null)
         {
             return StoreStatus.DestinationNotFound;
+        }
+
+        if (!TryBuildDestinationPath(path, targetFileName, out var destinationPath))
+        {
+            return StoreStatus.InvalidTargetFileName;
         }
 
         if (this.copyWithRsync(sourcePath, destinationPath) == 0)
@@ -145,6 +150,50 @@ internal sealed class StorageEngine : IStorageEngine
 
         Console.WriteLine("Copy failed completely");
         return false;
+    }
+
+    private static bool TryBuildDestinationPath(
+        string destinationDirectory,
+        string targetFileName,
+        out string destinationPath)
+    {
+        destinationPath = string.Empty;
+
+        var trimmed = targetFileName?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return false;
+        }
+
+        // Reject path traversal and path segments; only plain file names are allowed.
+        if (!string.Equals(trimmed, Path.GetFileName(trimmed), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (trimmed.Contains("..", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            return false;
+        }
+
+        var candidatePath = Path.Combine(destinationDirectory, $"{trimmed}.eml");
+        var fullDestinationDirectory = Path.GetFullPath(destinationDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var fullCandidatePath = Path.GetFullPath(candidatePath);
+
+        if (!fullCandidatePath.StartsWith(fullDestinationDirectory, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        destinationPath = fullCandidatePath;
+        return true;
     }
 
     private static string GetRequiredEnvironmentVariable(string name)

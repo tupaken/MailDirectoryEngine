@@ -23,9 +23,12 @@ Request body:
 ```json
 {
   "sourcePath": "/mail-export/example.eml",
-  "number": "12345"
+  "number": "12345",
+  "targetFileName": "example_renamed"
 }
 ```
+
+`targetFileName` is the destination file name without extension. The service stores the file as `<targetFileName>.eml` in the resolved target directory.
 
 Successful response:
 
@@ -45,6 +48,7 @@ Failed responses:
 
 - `404 Not Found` with `destination_not_found`: no destination folder matches the case number.
 - `404 Not Found` with `source_not_found`: the exported `.eml` file path does not exist inside the container.
+- `400 Bad Request` with `invalid_target_file_name`: the provided `targetFileName` is empty, contains invalid characters, or contains path segments/traversal sequences (for example `../`).
 - `503 Service Unavailable` with `share_unavailable`: the target share could not be mounted/reached.
 - `500 Internal Server Error` with `copy_failed`: destination lookup succeeded, but copying still failed after retries.
 
@@ -57,8 +61,9 @@ Use container-visible source paths such as `/mail-export/example.eml`. Windows h
 3. Search below `MOUNT_PATH` for the first top-level directory starting with the given case number.
 4. Search below that directory for the first directory containing `DIRECTORY2`.
 5. Search below that directory for the first subdirectory whose normalized name contains `DIRECTORY3`.
-6. Copy the exported file with `rsync -av --partial --inplace`.
-7. Retry failed `rsync` copies up to five additional times.
+6. Validate `targetFileName` and build a destination file path inside the resolved directory.
+7. Copy the exported file with `rsync -av --partial --inplace`.
+8. Retry failed `rsync` copies up to five additional times.
 
 Normalization strips non-alphanumeric characters and compares case-insensitively. This allows folder names such as `Bewerbungen & Lebenslaeufe` to match a configured `DIRECTORY3` value like `Bewerbungen`.
 

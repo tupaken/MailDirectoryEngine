@@ -1,6 +1,6 @@
 """Prompt rendering for inbox LLM queries."""
 
-from .promtInbox import PROMPT_CONTEXT_TEMPLATE, PROMPT_SIGNATURE_TEMPLATE
+from .promptInbox import PROMPT_CONTEXT_TEMPLATE, PROMPT_SIGNATURE_TEMPLATE
 
 
 def _build_prompt(mail: str, query_type: str) -> str:
